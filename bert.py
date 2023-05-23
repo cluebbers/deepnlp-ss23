@@ -47,7 +47,26 @@ class BertSelfAttention(nn.Module):
     # next, we need to concat multi-heads and recover the original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
 
     ### TODO
-    raise NotImplementedError
+    # query, key and value are [bs, num_attention_heads, seq_len, attention_head_size]
+    # transpose key to [bs, num_attention_heads, attention_head_size, seq_len]    
+    key = key.transpose(2,3) 
+    # calculating attention score
+    S = torch.matmul(query, key) 
+    # mask the padding token scores
+    S += attention_mask
+    # normalizing
+    S /= math.sqrt(self.attention_head_size)
+    S = nn.Softmax(S, dim=3)
+    
+    attention = torch.matmul(S, value)
+    # attention [bs, self.num_attention_heads, seq_len, self.attention_head_size]
+    # transposing attention to original shape
+    attention = attention.transpose(1,2)
+    # concat multi-heads
+    attention = attention.reshape(attention.shape[0], attention.shape[1], self.all_head_size)
+    
+    return attention
+    #raise NotImplementedError 
 
 
   def forward(self, hidden_states, attention_mask):
