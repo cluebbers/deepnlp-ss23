@@ -1,0 +1,10 @@
+cudatoolkit=10.1
+explainaboard_client==0.0.7
+filelock==3.0.12
+importlib-metadata==3.7.0
+pytorch==1.8.0
+sklearn==0.0
+tokenizers==0.10.1
+torchaudio
+torchvision
+tqdm==4.58.0
