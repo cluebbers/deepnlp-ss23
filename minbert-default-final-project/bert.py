@@ -51,15 +51,20 @@ class BertSelfAttention(nn.Module):
     # query, key and value are [bs, num_attention_heads, seq_len, attention_head_size]
     # transpose key to [bs, num_attention_heads, attention_head_size, seq_len]    
     key = key.transpose(2,3) 
+    
     # calculating attention score
     S = torch.matmul(query, key) 
-    # mask the padding token scores
-    S += attention_mask
-    # normalizing using the given formula
-    S /= math.sqrt(self.attention_head_size)
-    S = nn.Softmax(S, dim=3)
     
+    # mask the padding token scores
+    # S = S + attention_mask
+    S = torch.add(S, attention_mask)
+    
+    # normalizing using the given formula
+    # S = S / math.sqrt(self.attention_head_size)
+    S = torch.div(S, math.sqrt(self.attention_head_size))
+    S = nn.Softmax(S, dim=3)    
     attention = torch.matmul(S, value)
+    
     # attention [bs, self.num_attention_heads, seq_len, self.attention_head_size]
     # transposing attention to original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
     # and concat multi-heads
@@ -116,12 +121,15 @@ class BertLayer(nn.Module):
     ### TODO
     # section 5.4 in "Attention is all you need"
     # dense_layer: used to transform the output
-    output = dense_layer(output)
+    transform = dense_layer(output)
+    
     # dropout: the dropout to be applied
-    output = dropout(output)
+    dropout = dropout(transform)
     
     # ln_layer: the layer norm to be applied
-    return ln_layer(input + output)
+    norm = ln_layer(input + dropout)
+    
+    return norm
     # raise NotImplementedError
 
 
@@ -136,7 +144,26 @@ class BertLayer(nn.Module):
     4. a add-norm that takes the input and output of the feed forward layer
     """
     ### TODO
-    raise NotImplementedError
+    # 1. a multi-head attention layer (BertSelfAttention)
+    # see first TODO implementation
+    attention = self.self_attention(hidden_states, attention_mask)
+    
+    # 2. a add-norm that takes the input and output of the multi-head attention layer
+    # see second TODO implementation
+    # function inputs are specidfied above in the class after # add_norm
+    norm = self.add_norm(hidden_states, attention, self.attention_dense, self.attention_dropout, self.attention_layer_norm)
+    
+    # 3. a feed forward layer
+    # see class definition
+    # input is the normalized layer
+    feed = self.interm_dense(norm)
+    feed = self.interm_af(forward)
+    
+    # 4. a add-norm that takes the input and output of the feed forward layer   
+    forward = self.add_norm(hidden_states, feed, self.out_dense, self.out_dropout, self.out_layer_norm)
+    
+    return forward
+    # raise NotImplementedError
 
 
 
