@@ -47,6 +47,7 @@ class BertSelfAttention(nn.Module):
     # next, we need to concat multi-heads and recover the original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
 
     ### TODO
+    # section 3.2.1 in "Attention is all you need"
     # query, key and value are [bs, num_attention_heads, seq_len, attention_head_size]
     # transpose key to [bs, num_attention_heads, attention_head_size, seq_len]    
     key = key.transpose(2,3) 
@@ -54,15 +55,15 @@ class BertSelfAttention(nn.Module):
     S = torch.matmul(query, key) 
     # mask the padding token scores
     S += attention_mask
-    # normalizing
+    # normalizing using the given formula
     S /= math.sqrt(self.attention_head_size)
     S = nn.Softmax(S, dim=3)
     
     attention = torch.matmul(S, value)
     # attention [bs, self.num_attention_heads, seq_len, self.attention_head_size]
-    # transposing attention to original shape
+    # transposing attention to original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
+    # and concat multi-heads
     attention = attention.transpose(1,2)
-    # concat multi-heads
     attention = attention.reshape(attention.shape[0], attention.shape[1], self.all_head_size)
     
     return attention
@@ -113,7 +114,15 @@ class BertLayer(nn.Module):
     """
     # Hint: Remember that BERT applies to the output of each sub-layer, before it is added to the sub-layer input and normalized 
     ### TODO
-    raise NotImplementedError
+    # section 5.4 in "Attention is all you need"
+    # dense_layer: used to transform the output
+    output = dense_layer(output)
+    # dropout: the dropout to be applied
+    output = dropout(output)
+    
+    # ln_layer: the layer norm to be applied
+    return ln_layer(input + output)
+    # raise NotImplementedError
 
 
   def forward(self, hidden_states, attention_mask):
