@@ -121,13 +121,13 @@ class BertLayer(nn.Module):
     ### TODO
     # section 5.4 in "Attention is all you need"
     # dense_layer: used to transform the output
-    transform = dense_layer(output)
+    norm = dense_layer(output)
     
     # dropout: the dropout to be applied
-    dropout = dropout(transform)
+    norm = dropout(norm)
     
     # ln_layer: the layer norm to be applied
-    norm = ln_layer(input + dropout)
+    norm = ln_layer(input + norm)
     
     return norm
     # raise NotImplementedError
@@ -205,7 +205,9 @@ class BertModel(BertPreTrainedModel):
     # Get word embedding from self.word_embedding into input_embeds.
     inputs_embeds = None
     ### TODO
-    raise NotImplementedError
+    # see class definition
+    inputs_embeds = self.word_embedding(input_ids)
+    # raise NotImplementedError
 
 
     # Get position index and position embedding from self.pos_embedding into pos_embeds.
@@ -213,7 +215,11 @@ class BertModel(BertPreTrainedModel):
 
     pos_embeds = None
     ### TODO
-    raise NotImplementedError
+    # see class definition
+    pos_ids = self.position_ids[:, :seq_length]
+
+    pos_embeds = self.pos_embedding(pos_ids)
+    # raise NotImplementedError
 
 
     # Get token type ids, since we are not consider token type, just a placeholder.
@@ -222,6 +228,13 @@ class BertModel(BertPreTrainedModel):
 
     # Add three embeddings together; then apply embed_layer_norm and dropout and return.
     ### TODO
+    embeds = torch.add(inputs_embeds, torch.add(tk_type_embeds, pos_embeds))
+    embeds = self.embed_layer_norm(embeds)
+    embeds = self.embed_dropout(embeds)
+    
+    return embeds
+
+
     raise NotImplementedError
 
 
