@@ -62,7 +62,7 @@ class BertSelfAttention(nn.Module):
     # normalizing using the given formula
     # S = S / math.sqrt(self.attention_head_size)
     S = torch.div(S, math.sqrt(self.attention_head_size))
-    S = nn.Softmax(S, dim=3)    
+    S = F.softmax(S, dim=3)    
     attention = torch.matmul(S, value)
     
     # attention [bs, self.num_attention_heads, seq_len, self.attention_head_size]
@@ -157,7 +157,7 @@ class BertLayer(nn.Module):
     # see class definition
     # input is the normalized layer
     feed = self.interm_dense(norm)
-    feed = self.interm_af(forward)
+    feed = self.interm_af(feed)
     
     # 4. a add-norm that takes the input and output of the feed forward layer   
     forward = self.add_norm(hidden_states, feed, self.out_dense, self.out_dropout, self.out_layer_norm)
