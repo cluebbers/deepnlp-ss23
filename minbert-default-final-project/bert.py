@@ -233,9 +233,7 @@ class BertModel(BertPreTrainedModel):
     embeds = self.embed_dropout(embeds)
     
     return embeds
-
-
-    raise NotImplementedError
+    # raise NotImplementedError
 
 
   def encode(self, hidden_states, attention_mask):
