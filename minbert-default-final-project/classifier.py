@@ -45,7 +45,14 @@ class BertSentimentClassifier(torch.nn.Module):
                 param.requires_grad = True
 
         ### TODO
+        # forward pass
+        # see bert.BertModel.embed
+        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        
+        # linear classifier
+        self.classifier = torch.nn.Linear(config.hidden_size, config.num_labels)
         raise NotImplementedError
+    
 
 
     def forward(self, input_ids, attention_mask):
@@ -54,7 +61,25 @@ class BertSentimentClassifier(torch.nn.Module):
         # HINT: you should consider what is the appropriate output to return given that
         # the training loop currently uses F.cross_entropy as the loss function.
         ### TODO
-        raise NotImplementedError
+        # see 6.2.1 in project description
+        # add needed functions above
+        # You will implement this class to encode sentences using BERT and obtain the pooled representation of each sentence
+        # bert.BertModel.embed needs input_ids and attention_mask
+        pooled = self.bert(input_ids, attention_mask)
+        
+        # The class will then classify the sentence by applying dropout on the pooled output
+        pooled = self.dropout(pooled)
+        
+        # and then projecting it using a linear layer.
+        logits = self.classifier(pooled)
+        
+        # using the HINT: cross-entropy expects log probabilities as input
+        # we get them using log_softmax
+        probs = F.log_softmax(logits, dim=1)
+        
+        return probs
+        
+        # raise NotImplementedError
 
 
 
