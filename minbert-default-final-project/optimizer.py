@@ -59,6 +59,36 @@ class AdamW(Optimizer):
                 #    (incorporating the learning rate again).
 
                 ### TODO
+                # see project description page 16
+                # given
+                # alpha is given above
+                beta_1, beta_2 = group["betas"]
+                eps = group["eps"]
+                weight_decay = group["weight_decay"]
+                
+                # Initialize 
+                state["step"] = 0
+                state["m_t"] = torch.zeros() # dim?
+                state["v_t"] = torch.zeros() # dim?
+                
+                # loop
+                state["step"] += 1 # better way?
+                
+                # 1- Update first and second moments of the gradients
+                # here and below all operations are element-wise
+                m_t = beta_1 * m_(t-1) + (1 - beta_1) * g_t
+                v_t = beta_2 * v_(t-1) + (1 - beta_2) * g_t^2
+                
+                # 2- Apply bias correction
+                m_t = m_t / (1 - beta_1^t)
+                v_t = v_t / (1 - beta_2^t)
+                
+                # 3- Update parameters (p.data).
+                theta_t = theta_(t-1) - alpha * m_t/ (sqrt(v_t + eps))
+                
+                # 4- After that main gradient-based update, update again using weight decay
+                # see "DECOUPLED WEIGHT DECAY REGULARIZATION" page 3
+                theta_t = theta_t + weight_decay * theta_(t-1)
                 raise NotImplementedError
 
 
