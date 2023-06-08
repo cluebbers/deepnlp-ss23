@@ -67,29 +67,45 @@ class AdamW(Optimizer):
                 weight_decay = group["weight_decay"]
                 
                 # Initialize 
-                state["step"] = 0
-                state["m_t"] = torch.zeros() # dim?
-                state["v_t"] = torch.zeros() # dim?
+                # theta_t = p.data                
+                if "step" not in state:
+                    state["step"] = 0
+                if "m_t" not in state:
+                    state["m_t"] = torch.zeros_like(p.data) # dim like parameter tensor
+                if "v_t" not in state:
+                    state["v_t"] = torch.zeros_like(p.data) 
                 
-                # loop
-                state["step"] += 1 # better way?
+                # repeat
+                state["step"] += 1 
+                t = state["step"]
+                m_t = state["m_t"]
+                v_t = state["v_t"]                
                 
                 # 1- Update first and second moments of the gradients
-                # here and below all operations are element-wise
-                m_t = beta_1 * m_(t-1) + (1 - beta_1) * g_t
-                v_t = beta_2 * v_(t-1) + (1 - beta_2) * g_t^2
+                # here and below all operations are ELEMENT-WISE
+                m_t.mul_(beta_1).add_(grad, alpha = 1 - beta_1)
+                v_t.mul_(beta_2).add_(grad.pow(2), alpha = 1 - beta_2)
                 
                 # 2- Apply bias correction
-                m_t = m_t / (1 - beta_1^t)
-                v_t = v_t / (1 - beta_2^t)
+                # normal:
+                # m_t_hat = m_t / (1 - beta_1 ** t)
+                # v_t_hat = v_t / (1 - beta_2 ** t)
+                # efficiency version:
+                # but: no alpha schedule according to structure.md
+                alpha_t = alpha * math.sqrt(1 - beta_2 ** t) / (1- beta_1 ** t)
                 
                 # 3- Update parameters (p.data).
-                theta_t = theta_(t-1) - alpha * m_t/ (sqrt(v_t + eps))
+                # normal:
+                # p.data = p.data - alpha * m_t_hat / (v_t_hat.sqrt() + eps)
+                # efficiency version:
+                p.data.addcdiv_(m_t, v_t.sqrt().add_(eps), value=-alpha_t)
                 
                 # 4- After that main gradient-based update, update again using weight decay
                 # see "DECOUPLED WEIGHT DECAY REGULARIZATION" page 3
-                theta_t = theta_t + weight_decay * theta_(t-1)
-                raise NotImplementedError
+                # alpha or alpha_t?
+                p.data.mul_(1 - alpha_t * weight_decay)
+                
+                # raise NotImplementedError
 
 
         return loss
