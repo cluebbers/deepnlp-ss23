@@ -47,30 +47,37 @@ class BertSelfAttention(nn.Module):
     # next, we need to concat multi-heads and recover the original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
 
     ### TODO
-    # section 3.2.1 in "Attention is all you need"
+    # section 3.2.1 in "Attention is all you need" and Figure 2
+    # MatMul Q and K
     # query, key and value are [bs, num_attention_heads, seq_len, attention_head_size]
     # transpose key to [bs, num_attention_heads, attention_head_size, seq_len]    
-    key = key.transpose(2,3) 
-    
-    # calculating attention score
+    key = key.transpose(2,3)     
+    # calculating attention scores
     S = torch.matmul(query, key) 
+
+    # Scale
+    # S = S / math.sqrt(self.attention_head_size)
+    S = torch.div(S, math.sqrt(self.attention_head_size))
     
     # mask the padding token scores
     # S = S + attention_mask
-    S = torch.add(S, attention_mask)
+    S = torch.add(S, attention_mask)        
+
+    # SoftMax
+    S = F.softmax(S, dim=3)  
     
-    # normalizing using the given formula
-    # S = S / math.sqrt(self.attention_head_size)
-    S = torch.div(S, math.sqrt(self.attention_head_size))
-    S = F.softmax(S, dim=3)    
+    # dropout (from description in class)
+    S = self.dropout(S)
+    
+    # multiply the attention scores to the value and get back V'
     attention = torch.matmul(S, value)
     
     # attention [bs, self.num_attention_heads, seq_len, self.attention_head_size]
     # transposing attention to original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
     # and concat multi-heads
     attention = attention.transpose(1,2)
-    attention = attention.reshape(attention.shape[0], attention.shape[1], self.all_head_size)
-    
+    attention = attention.reshape(attention.shape[0], attention.shape[1], self.all_head_size)  
+        
     return attention
     #raise NotImplementedError 
 
@@ -160,7 +167,7 @@ class BertLayer(nn.Module):
     feed = self.interm_af(feed)
     
     # 4. a add-norm that takes the input and output of the feed forward layer   
-    forward = self.add_norm(hidden_states, feed, self.out_dense, self.out_dropout, self.out_layer_norm)
+    forward = self.add_norm(norm, feed, self.out_dense, self.out_dropout, self.out_layer_norm)
     
     return forward
     # raise NotImplementedError
