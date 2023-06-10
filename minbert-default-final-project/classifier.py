@@ -51,7 +51,7 @@ class BertSentimentClassifier(torch.nn.Module):
         
         # linear classifier
         self.classifier = torch.nn.Linear(config.hidden_size, config.num_labels)
-        raise NotImplementedError
+        # raise NotImplementedError
     
 
 
@@ -65,7 +65,8 @@ class BertSentimentClassifier(torch.nn.Module):
         # add needed functions above
         # You will implement this class to encode sentences using BERT and obtain the pooled representation of each sentence
         # bert.BertModel.embed needs input_ids and attention_mask
-        pooled = self.bert(input_ids, attention_mask)
+        # line 279 in bert.py
+        pooled = self.bert(input_ids, attention_mask)['pooler_output']
         
         # The class will then classify the sentence by applying dropout on the pooled output
         pooled = self.dropout(pooled)
