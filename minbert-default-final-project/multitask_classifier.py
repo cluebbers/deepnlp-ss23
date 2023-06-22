@@ -52,6 +52,12 @@ class MultitaskBERT(nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO
+        
+        # see bert.BertModel.embed
+        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        # linear classifier
+        self.classifier = torch.nn.Linear(config.hidden_size, config.num_labels)
+        
         raise NotImplementedError
 
 
@@ -62,7 +68,11 @@ class MultitaskBERT(nn.Module):
         # When thinking of improvements, you can later try modifying this
         # (e.g., by adding other layers).
         ### TODO
-        raise NotImplementedError
+        # the same as the first part in classifier.BertSentimentClassifier.forward
+        pooled = self.bert(input_ids, attention_mask)['pooler_output']
+        return pooled
+    
+        #raise NotImplementedError
 
 
     def predict_sentiment(self, input_ids, attention_mask):
@@ -72,7 +82,22 @@ class MultitaskBERT(nn.Module):
         Thus, your output should contain 5 logits for each sentence.
         '''
         ### TODO
-        raise NotImplementedError
+        # the same as in classifier.BertSentimentClassifier.forward        
+        # input embeddings
+        pooled = self.forward(input_ids, attention_mask)
+        
+        # The class will then classify the sentence by applying dropout on the pooled output
+        pooled = self.dropout(pooled)
+        
+        # and then projecting it using a linear layer.
+        logits = self.classifier(pooled)
+        
+        # using the HINT: cross-entropy expects log probabilities as input
+        # we get them using log_softmax
+        probs = F.log_softmax(logits, dim=1)
+        
+        return probs
+        #raise NotImplementedError
 
 
     def predict_paraphrase(self,
