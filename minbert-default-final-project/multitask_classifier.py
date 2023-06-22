@@ -52,13 +52,14 @@ class MultitaskBERT(nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO
-        
+        self.hidden_size = BERT_HIDDEN_SIZE
+        self.num_labels = N_SENTIMENT_CLASSES
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         # linear classifier
-        self.classifier = torch.nn.Linear(config.hidden_size, config.num_labels)
+        self.classifier = torch.nn.Linear(self.hidden_size, self.num_labels)
         
-        raise NotImplementedError
+        # raise NotImplementedError
 
 
     def forward(self, input_ids, attention_mask):
@@ -72,7 +73,7 @@ class MultitaskBERT(nn.Module):
         pooled = self.bert(input_ids, attention_mask)['pooler_output']
         return pooled
     
-        #raise NotImplementedError
+        # raise NotImplementedError
 
 
     def predict_sentiment(self, input_ids, attention_mask):
@@ -97,7 +98,7 @@ class MultitaskBERT(nn.Module):
         probs = F.log_softmax(logits, dim=1)
         
         return probs
-        #raise NotImplementedError
+        # raise NotImplementedError
 
 
     def predict_paraphrase(self,
@@ -108,6 +109,9 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
+        # input embeddings
+        pooled_1 = self.forward(input_ids_1, attention_mask_1)
+        pooled_2 = self.forward(input_ids_2, attention_mask_2)
         raise NotImplementedError
 
 
@@ -119,7 +123,15 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        raise NotImplementedError
+        # input embeddings
+        pooled_1 = self.forward(input_ids_1, attention_mask_1)
+        pooled_2 = self.forward(input_ids_2, attention_mask_2)
+        
+        # use cosine similarity as in
+        # Agirre et al "SEM 2013 shared task: Semantic Textual Similarity" section 4.2
+        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        return similarity
+        # raise NotImplementedError
 
 
 
