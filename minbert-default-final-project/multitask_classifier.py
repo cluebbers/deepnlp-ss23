@@ -16,7 +16,9 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 from evaluation import model_eval_sst, test_model_multitask
 
 
-TQDM_DISABLE=True
+# changed by CLL
+# TQDM_DISABLE=True
+TQDM_DISABLE=False
 
 # fix the random seed
 def seed_everything(seed=11711):
@@ -57,8 +59,7 @@ class MultitaskBERT(nn.Module):
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         # linear classifier
-        self.classifier = torch.nn.Linear(self.hidden_size, self.num_labels)
-        
+        self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
         # raise NotImplementedError
 
 
@@ -112,7 +113,13 @@ class MultitaskBERT(nn.Module):
         # input embeddings
         pooled_1 = self.forward(input_ids_1, attention_mask_1)
         pooled_2 = self.forward(input_ids_2, attention_mask_2)
-        raise NotImplementedError
+        
+        # Fernando and Stevenson, 2008
+        # paraphrase is just like similarity
+        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        
+        return similarity
+        # raise NotImplementedError
 
 
     def predict_similarity(self,
