@@ -15,6 +15,9 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 
 from evaluation import model_eval_sst, test_model_multitask
 
+# CLL import multitask evaluation
+from evaluation import model_eval_multitask
+
 
 # changed by CLL
 # TQDM_DISABLE=True
@@ -60,6 +63,9 @@ class MultitaskBERT(nn.Module):
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         # linear classifier
         self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
+        # paraphrase classifier
+        self.paraphrase_classifier = torch.nn.Linear(1, 1)
+
         # raise NotImplementedError
 
 
@@ -92,13 +98,9 @@ class MultitaskBERT(nn.Module):
         pooled = self.dropout(pooled)
         
         # and then projecting it using a linear layer.
-        logits = self.classifier(pooled)
+        sentiment_logit = self.classifier(pooled)
         
-        # using the HINT: cross-entropy expects log probabilities as input
-        # we get them using log_softmax
-        probs = F.log_softmax(logits, dim=1)
-        
-        return probs
+        return sentiment_logit
         # raise NotImplementedError
 
 
@@ -118,7 +120,16 @@ class MultitaskBERT(nn.Module):
         # paraphrase is just like similarity
         similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
         
-        return similarity
+        # cosine_similarity has ouput [-1, 1], so it needs rescaling
+        # Reshape the similarity to fit the input shape of paraphrase_classifier
+        similarity = similarity.view(-1, 1)  
+        
+        # Generate the logit
+        paraphrase_logit = self.paraphrase_classifier(similarity)   
+        # Remove the extra dimension added by paraphrase_classifier
+        paraphrase_logit = paraphrase_logit.view(-1)
+        
+        return paraphrase_logit
         # raise NotImplementedError
 
 
@@ -136,7 +147,12 @@ class MultitaskBERT(nn.Module):
         
         # use cosine similarity as in
         # Agirre et al "SEM 2013 shared task: Semantic Textual Similarity" section 4.2
-        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        # cosine_similarity has ouput [-1, 1], so it needs rescaling
+        # +1 to get to [0, 2]
+        # /2 to get to [0, 1]
+        # *5 to get [0, 5] like in the dataset
+        similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
+        
         return similarity
         # raise NotImplementedError
 
@@ -169,31 +185,30 @@ def train_multitask(args):
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
     
-    # CLL added other datasets
-    # paraphrasing
-    para_train_data = SentencePairDataset(para_train_data, args)
-    para_dev_data = SentencePairDataset(para_dev_data, args)
-    # similarity
-    sts_train_data = SentencePairDataset(sts_train_data, args)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args)
-
     sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=sst_train_data.collate_fn)
     sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=sst_dev_data.collate_fn)
     
-    # CLL adding other dataloader
+    # CLL added other datasets and loaders
+    # see evaluation.py line 229
     # paraphrasing
+    para_train_data = SentencePairDataset(para_train_data, args)
+    para_dev_data = SentencePairDataset(para_dev_data, args)
+    
     para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=para_train_data.collate_fn)
     para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=para_dev_data.collate_fn)
-    
     # similarity
+    sts_train_data = SentencePairDataset(sts_train_data, args)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args)
+    
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=sts_train_data.collate_fn)
     sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=sts_dev_data.collate_fn)
+                                    collate_fn=sts_dev_data.collate_fn)   
+    # CLL end
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -243,7 +258,56 @@ def train_multitask(args):
             best_dev_acc = dev_acc
             save_model(model, optimizer, args, config, args.filepath)
 
-        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+        print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+        
+        # CLL add training on other tasks
+        # paraphrasing
+        # see evaluation.py line 72
+        model.train()
+        train_loss = 0
+        num_batches = 0
+        
+        # datasets.py line 145
+        for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
+                                                          batch['token_ids_2'], batch['attention_mask_2'],
+                                                          batch['labels']
+            )
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
+
+            optimizer.zero_grad()
+            logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+            
+            # we need a loss function that handles logits. maybe this one?
+            # paraphrasing is a binary task, so binary
+            # we get logits, so logits
+            # this one also has a sigmoid activation function
+            loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='sum') / args.batch_size
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batches += 1
+
+        train_loss = train_loss / num_batches
+        
+        print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
+        
+        paraphrase_accuracy, _, _, sentiment_accuracy, _, _, sts_corr, *_ = model_eval_multitask(sst_train_dataloader,
+                         para_train_dataloader,
+                         sts_train_dataloader,
+                         model, device)
+        paraphrase_accuracy, _, _, sentiment_accuracy, _, _, sts_corr, *_ = model_eval_multitask(sst_dev_dataloader,
+                         para_dev_dataloader,
+                         sts_dev_dataloader,
+                         model, device)
+        
+
 
 
 
