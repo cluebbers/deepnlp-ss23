@@ -76,9 +76,9 @@ class BertSentimentClassifier(torch.nn.Module):
         
         # using the HINT: cross-entropy expects log probabilities as input
         # we get them using log_softmax
-        probs = F.log_softmax(logits, dim=1)
+        #probs = F.log_softmax(logits, dim=1)
         
-        return probs
+        return logits
         
         # raise NotImplementedError
 
