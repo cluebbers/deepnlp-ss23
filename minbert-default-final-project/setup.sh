@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 
+if ! [ -x "$(command -v conda)" ]
+then
+    echo "Please install conda before running setup!"
+    exit
+fi
+
 conda create -n dnlp python=3.8
 conda activate dnlp
-
 conda install pytorch==1.8.0 torchvision torchaudio cudatoolkit=10.1 -c pytorch
 pip install tqdm==4.58.0
 pip install requests==2.25.1
