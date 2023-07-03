@@ -4,7 +4,7 @@ import sys
 import json
 import tempfile
 import copy
-from tqdm.auto import tqdm
+from tqdm import tqdm #"from tqdm.auto ..."raises error "IProgress not found"
 from functools import partial
 from urllib.parse import urlparse
 from pathlib import Path

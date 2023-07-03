@@ -5,6 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.autograd import Variable
 
 from bert import BertModel
 from optimizer import AdamW
@@ -152,7 +153,8 @@ class MultitaskBERT(nn.Module):
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
         similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
-        
+        #make similarity a torch variable to enable gradient updates
+        similarity = Variable(similarity, requires_grad=True)
         return similarity
         # raise NotImplementedError
 
@@ -228,6 +230,44 @@ def train_multitask(args):
 
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
+        
+        #train on semantic textual similarity (sts)
+        model.train()
+        train_loss = 0
+        num_batches = 0
+        for batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
+                                                          batch['token_ids_2'], batch['attention_mask_2'],
+                                                          batch['labels']
+            )
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
+
+            optimizer.zero_grad()
+            similarity = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+            similarity2 = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+            # we need a loss function for similarity
+            # there are different degrees of similarity
+            # So maybe the mean squared error is a suitable loss function for the beginning,
+            # since it punishes a prediction that is far away from the truth disproportionately
+            # more than a prediction that is close to the truth
+            loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batches += 1
+
+        train_loss = train_loss / num_batches
+        
+        print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
+        
+
+
+        # train on sentiment analysis
         model.train()
         train_loss = 0
         num_batches = 0
@@ -260,6 +300,7 @@ def train_multitask(args):
 
         print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
         
+        # train on paraphrasing
         # CLL add training on other tasks
         # paraphrasing
         # see evaluation.py line 72
