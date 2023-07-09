@@ -338,18 +338,6 @@ def train_multitask(args):
         train_loss = train_loss / num_batches
         
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
-        
-        paraphrase_accuracy, _, _, sentiment_accuracy, _, _, sts_corr, *_ = model_eval_multitask(sst_train_dataloader,
-                         para_train_dataloader,
-                         sts_train_dataloader,
-                         model, device)
-        paraphrase_accuracy, _, _, sentiment_accuracy, _, _, sts_corr, *_ = model_eval_multitask(sst_dev_dataloader,
-                         para_dev_dataloader,
-                         sts_dev_dataloader,
-                         model, device)
-        
-
-
 
 
 def test_model(args):
