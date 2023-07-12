@@ -5,6 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.autograd import Variable
 
 from bert import BertModel
 from optimizer import AdamW
@@ -15,8 +16,13 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 
 from evaluation import model_eval_sst, test_model_multitask
 
+# CLL import multitask evaluation
+from evaluation import model_eval_multitask
 
-TQDM_DISABLE=True
+
+# changed by CLL
+# TQDM_DISABLE=True
+TQDM_DISABLE=False
 
 # fix the random seed
 def seed_everything(seed=11711):
@@ -52,7 +58,16 @@ class MultitaskBERT(nn.Module):
             elif config.option == 'finetune':
                 param.requires_grad = True
         ### TODO
-        raise NotImplementedError
+        self.hidden_size = BERT_HIDDEN_SIZE
+        self.num_labels = N_SENTIMENT_CLASSES
+        # see bert.BertModel.embed
+        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        # linear classifier
+        self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
+        # paraphrase classifier
+        self.paraphrase_classifier = torch.nn.Linear(1, 1)
+
+        # raise NotImplementedError
 
 
     def forward(self, input_ids, attention_mask):
@@ -62,7 +77,11 @@ class MultitaskBERT(nn.Module):
         # When thinking of improvements, you can later try modifying this
         # (e.g., by adding other layers).
         ### TODO
-        raise NotImplementedError
+        # the same as the first part in classifier.BertSentimentClassifier.forward
+        pooled = self.bert(input_ids, attention_mask)['pooler_output']
+        return pooled
+    
+        # raise NotImplementedError
 
 
     def predict_sentiment(self, input_ids, attention_mask):
@@ -72,7 +91,18 @@ class MultitaskBERT(nn.Module):
         Thus, your output should contain 5 logits for each sentence.
         '''
         ### TODO
-        raise NotImplementedError
+        # the same as in classifier.BertSentimentClassifier.forward        
+        # input embeddings
+        pooled = self.forward(input_ids, attention_mask)
+        
+        # The class will then classify the sentence by applying dropout on the pooled output
+        pooled = self.dropout(pooled)
+        
+        # and then projecting it using a linear layer.
+        sentiment_logit = self.classifier(pooled)
+        
+        return sentiment_logit
+        # raise NotImplementedError
 
 
     def predict_paraphrase(self,
@@ -83,7 +113,25 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        raise NotImplementedError
+        # input embeddings
+        pooled_1 = self.forward(input_ids_1, attention_mask_1)
+        pooled_2 = self.forward(input_ids_2, attention_mask_2)
+        
+        # Fernando and Stevenson, 2008
+        # paraphrase is just like similarity
+        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        
+        # cosine_similarity has ouput [-1, 1], so it needs rescaling
+        # Reshape the similarity to fit the input shape of paraphrase_classifier
+        similarity = similarity.view(-1, 1)  
+        
+        # Generate the logit
+        paraphrase_logit = self.paraphrase_classifier(similarity)   
+        # Remove the extra dimension added by paraphrase_classifier
+        paraphrase_logit = paraphrase_logit.view(-1)
+        
+        return paraphrase_logit
+        # raise NotImplementedError
 
 
     def predict_similarity(self,
@@ -94,7 +142,21 @@ class MultitaskBERT(nn.Module):
         during evaluation, and handled as a logit by the appropriate loss function.
         '''
         ### TODO
-        raise NotImplementedError
+        # input embeddings
+        pooled_1 = self.forward(input_ids_1, attention_mask_1)
+        pooled_2 = self.forward(input_ids_2, attention_mask_2)
+        
+        # use cosine similarity as in
+        # Agirre et al "SEM 2013 shared task: Semantic Textual Similarity" section 4.2
+        # cosine_similarity has ouput [-1, 1], so it needs rescaling
+        # +1 to get to [0, 2]
+        # /2 to get to [0, 1]
+        # *5 to get [0, 5] like in the dataset
+        similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
+        #make similarity a torch variable to enable gradient updates
+        similarity = Variable(similarity, requires_grad=True)
+        return similarity
+        # raise NotImplementedError
 
 
 
@@ -124,11 +186,31 @@ def train_multitask(args):
 
     sst_train_data = SentenceClassificationDataset(sst_train_data, args)
     sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
-
+    
     sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=sst_train_data.collate_fn)
     sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=sst_dev_data.collate_fn)
+    
+    # CLL added other datasets and loaders
+    # see evaluation.py line 229
+    # paraphrasing
+    para_train_data = SentencePairDataset(para_train_data, args)
+    para_dev_data = SentencePairDataset(para_dev_data, args)
+    
+    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
+                                      collate_fn=para_train_data.collate_fn)
+    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
+                                    collate_fn=para_dev_data.collate_fn)
+    # similarity
+    sts_train_data = SentencePairDataset(sts_train_data, args)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args)
+    
+    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
+                                      collate_fn=sts_train_data.collate_fn)
+    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
+                                    collate_fn=sts_dev_data.collate_fn)   
+    # CLL end
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -148,6 +230,44 @@ def train_multitask(args):
 
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
+        
+        #train on semantic textual similarity (sts)
+        model.train()
+        train_loss = 0
+        num_batches = 0
+        for batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
+                                                          batch['token_ids_2'], batch['attention_mask_2'],
+                                                          batch['labels']
+            )
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
+
+            optimizer.zero_grad()
+            similarity = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+            similarity2 = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+            # we need a loss function for similarity
+            # there are different degrees of similarity
+            # So maybe the mean squared error is a suitable loss function for the beginning,
+            # since it punishes a prediction that is far away from the truth disproportionately
+            # more than a prediction that is close to the truth
+            loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batches += 1
+
+        train_loss = train_loss / num_batches
+        
+        print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
+        
+
+
+        # train on sentiment analysis
         model.train()
         train_loss = 0
         num_batches = 0
@@ -178,8 +298,46 @@ def train_multitask(args):
             best_dev_acc = dev_acc
             save_model(model, optimizer, args, config, args.filepath)
 
-        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+        print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+        
+        # train on paraphrasing
+        # CLL add training on other tasks
+        # paraphrasing
+        # see evaluation.py line 72
+        model.train()
+        train_loss = 0
+        num_batches = 0
+        
+        # datasets.py line 145
+        for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
+                                                          batch['token_ids_2'], batch['attention_mask_2'],
+                                                          batch['labels']
+            )
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
 
+            optimizer.zero_grad()
+            logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+            
+            # we need a loss function that handles logits. maybe this one?
+            # paraphrasing is a binary task, so binary
+            # we get logits, so logits
+            # this one also has a sigmoid activation function
+            loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='sum') / args.batch_size
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            num_batches += 1
+
+        train_loss = train_loss / num_batches
+        
+        print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
 
 
 def test_model(args):
