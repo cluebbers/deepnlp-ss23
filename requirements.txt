@@ -8,3 +8,6 @@ tokenizers==0.10.1
 torchaudio
 torchvision
 tqdm==4.58.0
+
+#pip?
+torch_tb_profiler
