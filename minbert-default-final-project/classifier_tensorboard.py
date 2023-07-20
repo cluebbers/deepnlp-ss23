@@ -319,9 +319,9 @@ def train(args):
         
         # tensorboard
         writer.add_scalar("Loss/train", train_loss, epoch)
-        writer.add_scalar("Accuracy/train", train_acc, epoch)
-        writer.add_scalar("Accuracy/dev", dev_acc, epoch)
-
+        writer.add_scalars("Accuracy", {"train" : train_acc, "dev" : dev_acc}, epoch)        
+        writer.add_scalars("F1", {"train": train_f1, "dev":dev_f1}, epoch)
+        
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
             save_model(model, optimizer, args, config, args.filepath)
@@ -391,7 +391,7 @@ if __name__ == "__main__":
 
     print('Training Sentiment Classifier on SST...')
     config = SimpleNamespace(
-        filepath='sst-classifier.pt',
+        filepath='sst-classifier_tensorboard.pt',
         lr=args.lr,
         use_gpu=args.use_gpu,
         epochs=args.epochs,
