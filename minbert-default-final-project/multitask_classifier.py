@@ -65,7 +65,8 @@ class MultitaskBERT(nn.Module):
         # linear classifier
         self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
         # paraphrase classifier
-        self.paraphrase_classifier = torch.nn.Linear(1, 1)
+        # two neurons: paraphrase and not-paraphrase
+        self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*2, 1)
 
         # raise NotImplementedError
 
@@ -119,16 +120,27 @@ class MultitaskBERT(nn.Module):
         
         # Fernando and Stevenson, 2008
         # paraphrase is just like similarity
-        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        # similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
         
         # cosine_similarity has ouput [-1, 1], so it needs rescaling
         # Reshape the similarity to fit the input shape of paraphrase_classifier
-        similarity = similarity.view(-1, 1)  
-        
+        # similarity = similarity.view(-1, 1)  
+       
         # Generate the logit
-        paraphrase_logit = self.paraphrase_classifier(similarity)   
+        # paraphrase_logit = self.paraphrase_classifier(similarity)   
         # Remove the extra dimension added by paraphrase_classifier
-        paraphrase_logit = paraphrase_logit.view(-1)
+        # paraphrase_logit = paraphrase_logit.view(-1)
+        
+        # Element-wise difference
+        diff = torch.abs(pooled_1 - pooled_2)
+        
+        # Element-wise product
+        prod = pooled_1 * pooled_2
+
+        # Concatenate difference and product
+        pooled = torch.cat([diff, prod], dim=-1)
+        
+        paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
         
         return paraphrase_logit
         # raise NotImplementedError
@@ -152,9 +164,13 @@ class MultitaskBERT(nn.Module):
         # +1 to get to [0, 2]
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
-        similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
+        # similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
         #make similarity a torch variable to enable gradient updates
-        similarity = Variable(similarity, requires_grad=True)
+        # similarity = Variable(similarity, requires_grad=True)
+        
+        # without scaling
+        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        
         return similarity
         # raise NotImplementedError
 
@@ -247,8 +263,7 @@ def train_multitask(args):
             b_labels = b_labels.to(device)
 
             optimizer.zero_grad()
-            similarity = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-            similarity2 = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+            similarity = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
             # we need a loss function for similarity
             # there are different degrees of similarity
             # So maybe the mean squared error is a suitable loss function for the beginning,
