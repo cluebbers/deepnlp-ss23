@@ -1,10 +1,11 @@
-cudatoolkit==10.1
+cudatoolkit==11.7
 explainaboard_client==0.0.7
 filelock==3.0.12
 importlib-metadata==3.7.0
-pytorch==1.8.0
+pytorch==2.0.0
+requests==2.25.1
 sklearn==0.0
 tokenizers==0.10.1
-torchaudio
-torchvision
+torchaudio==2.0.1
+torchvision==0.15.1
 tqdm==4.58.0
