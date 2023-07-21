@@ -17,7 +17,7 @@ explicitly aside from model_eval_multitask.
 
 import torch
 from torch.utils.data import DataLoader
-from sklearn.metrics import classification_report, f1_score, recall_score, accuracy_score
+from sklearn.metrics import classification_report, f1_score, recall_score, accuracy_score, precision_score
 from tqdm import tqdm
 import numpy as np
 
@@ -90,7 +90,11 @@ def model_eval_multitask(sentiment_dataloader,
             para_y_true.extend(b_labels)
             para_sent_ids.extend(b_sent_ids)
 
-        paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
+        # paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
+        paraphrase_accuracy = accuracy_score(para_y_true, para_y_pred)
+        paraphrase_precision = precision_score(para_y_true, para_y_pred)
+        paraphrase_recall = recall_score(para_y_true, para_y_pred)
+        paraphrase_f1 = f1_score(para_y_true, para_y_pred)
 
         sts_y_true = []
         sts_y_pred = []
@@ -140,14 +144,18 @@ def model_eval_multitask(sentiment_dataloader,
             sst_y_true.extend(b_labels)
             sst_sent_ids.extend(b_sent_ids)
 
-        sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
+        # sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
+        sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
+        sentiment_precision = precision_score(sst_y_true, sst_y_pred)
+        sentiment_recall = recall_score(sst_y_true, sst_y_pred)
+        sentiment_f1 = f1_score(sst_y_true, sst_y_pred)
 
         print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
         print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
         print(f'Semantic Textual Similarity correlation: {sts_corr:.3f}')
 
-        return (paraphrase_accuracy, para_y_pred, para_sent_ids,
-                sentiment_accuracy,sst_y_pred, sst_sent_ids,
+        return (paraphrase_accuracy, para_y_pred, para_sent_ids, paraphrase_precision, paraphrase_recall, paraphrase_f1, 
+                sentiment_accuracy,sst_y_pred, sst_sent_ids, sentiment_precision, sentiment_recall, sentiment_f1,
                 sts_corr, sts_y_pred, sts_sent_ids)
 
 # Perform model evaluation in terms by averaging accuracies across tasks.
