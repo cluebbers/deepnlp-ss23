@@ -18,7 +18,7 @@ from evaluation import model_eval_sst, test_model_multitask
 
 # CLL import multitask evaluation
 from evaluation import model_eval_multitask
-
+from torch.utils.tensorboard import SummaryWriter
 
 # changed by CLL
 # TQDM_DISABLE=True
@@ -60,12 +60,15 @@ class MultitaskBERT(nn.Module):
         ### TODO
         self.hidden_size = BERT_HIDDEN_SIZE
         self.num_labels = N_SENTIMENT_CLASSES
+        
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        
         # linear classifier
         self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
+        
         # paraphrase classifier
-        # two neurons: paraphrase and not-paraphrase
+        # double hidden size do concatenate both sentences
         self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*2, 1)
 
         # raise NotImplementedError
@@ -278,6 +281,8 @@ def train_multitask(args):
             num_batches += 1
 
         train_loss = train_loss / num_batches
+        # tensorboard
+        writer.add_scalar("sts/loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
         
@@ -306,6 +311,9 @@ def train_multitask(args):
             num_batches += 1
 
         train_loss = train_loss / (num_batches)
+        
+        # tensorboard
+        writer.add_scalar("sst/loss", train_loss, epoch)
 
         train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
         dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
@@ -352,6 +360,9 @@ def train_multitask(args):
             num_batches += 1
 
         train_loss = train_loss / num_batches
+        
+        # tensorboard
+        writer.add_scalar("para/loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
 
@@ -414,5 +425,12 @@ if __name__ == "__main__":
     args = get_args()
     args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility
+    
+    # tensorboard writer
+    writer = SummaryWriter()
     train_multitask(args)
     test_model(args)
+    
+    # close tensorboard writer
+    writer.flush()
+    writer.close()
