@@ -19,6 +19,9 @@ from evaluation import model_eval_sst, test_model_multitask
 # CLL import multitask evaluation
 from evaluation import model_eval_multitask
 
+# import SOPHIA
+from optimizer_sophia import SophiaG
+
 
 # changed by CLL
 # TQDM_DISABLE=True
@@ -51,7 +54,7 @@ class MultitaskBERT(nn.Module):
         super(MultitaskBERT, self).__init__()
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
-        self.bert = BertModel.from_pretrained('bert-base-uncased', local_files_only=config.local_files_only)
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
         for param in self.bert.parameters():
             if config.option == 'pretrain':
                 param.requires_grad = False
@@ -65,8 +68,7 @@ class MultitaskBERT(nn.Module):
         # linear classifier
         self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
         # paraphrase classifier
-        # two neurons: paraphrase and not-paraphrase
-        self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*2, 1)
+        self.paraphrase_classifier = torch.nn.Linear(1, 1)
 
         # raise NotImplementedError
 
@@ -120,27 +122,16 @@ class MultitaskBERT(nn.Module):
         
         # Fernando and Stevenson, 2008
         # paraphrase is just like similarity
-        # similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
         
         # cosine_similarity has ouput [-1, 1], so it needs rescaling
         # Reshape the similarity to fit the input shape of paraphrase_classifier
-        # similarity = similarity.view(-1, 1)  
-       
+        similarity = similarity.view(-1, 1)  
+        
         # Generate the logit
-        # paraphrase_logit = self.paraphrase_classifier(similarity)   
+        paraphrase_logit = self.paraphrase_classifier(similarity)   
         # Remove the extra dimension added by paraphrase_classifier
-        # paraphrase_logit = paraphrase_logit.view(-1)
-        
-        # Element-wise difference
-        diff = torch.abs(pooled_1 - pooled_2)
-        
-        # Element-wise product
-        prod = pooled_1 * pooled_2
-
-        # Concatenate difference and product
-        pooled = torch.cat([diff, prod], dim=-1)
-        
-        paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
+        paraphrase_logit = paraphrase_logit.view(-1)
         
         return paraphrase_logit
         # raise NotImplementedError
@@ -164,13 +155,9 @@ class MultitaskBERT(nn.Module):
         # +1 to get to [0, 2]
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
-        # similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
+        similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
         #make similarity a torch variable to enable gradient updates
-        # similarity = Variable(similarity, requires_grad=True)
-        
-        # without scaling
-        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
-        
+        similarity = Variable(similarity, requires_grad=True)
         return similarity
         # raise NotImplementedError
 
@@ -233,8 +220,7 @@ def train_multitask(args):
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option,
-              'local_files_only': args.local_files_only}
+              'option': args.option}
 
     config = SimpleNamespace(**config)
 
@@ -242,7 +228,13 @@ def train_multitask(args):
     model = model.to(device)
 
     lr = args.lr
-    optimizer = AdamW(model.parameters(), lr=lr)
+    
+    # SOPHIA
+    # as in official implementation
+    # optimizer = SophiaG(model.parameters(), lr=2e-4, betas=(0.965, 0.99), rho = 0.01, weight_decay=1e-1)
+    # like AdamW
+    optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01)
+    # optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
 
     # Run for the specified number of epochs
@@ -252,6 +244,9 @@ def train_multitask(args):
         model.train()
         train_loss = 0
         num_batches = 0
+        
+        # SOPHIA k = 10
+        k = 10
         for batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
             b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
                                                           batch['token_ids_2'], batch['attention_mask_2'],
@@ -262,25 +257,37 @@ def train_multitask(args):
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
+            # SOPHIA
+            if num_batches % k != k - 1:                
+                logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+                
+                loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
+                loss.backward()
+                
+                optimizer.step()
+                optimizer.zero_grad()
+                
+                train_loss += loss.item()
+                num_batches += 1
+            else:
+                logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+                
+                loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
+                loss.backward()
+                
+                optimizer.step()
+                optimizer.zero_grad()
 
-            optimizer.zero_grad()
-            similarity = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
-            # we need a loss function for similarity
-            # there are different degrees of similarity
-            # So maybe the mean squared error is a suitable loss function for the beginning,
-            # since it punishes a prediction that is far away from the truth disproportionately
-            # more than a prediction that is close to the truth
-            loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
-            loss.backward()
-            optimizer.step()
-
-            train_loss += loss.item()
-            num_batches += 1
+                train_loss += loss.item()
+                num_batches += 1
+                
+                # update hession EMA
+                optimizer.update_hessian()
+                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / num_batches
         
-        print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
-        
+        print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")        
 
 
         # train on sentiment analysis
@@ -295,15 +302,33 @@ def train_multitask(args):
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
 
-            optimizer.zero_grad()
-            logits = model.predict_sentiment(b_ids, b_mask)
-            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+            # SOPHIA
+            if num_batches % k != k - 1:               
+                logits = model.predict_sentiment(b_ids, b_mask)
+                
+                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                loss.backward()
+                
+                optimizer.step()
+                optimizer.zero_grad()
 
-            loss.backward()
-            optimizer.step()
+                train_loss += loss.item()
+                num_batches += 1
+            else:              
+                logits = model.predict_sentiment(b_ids, b_mask)
+                
+                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                loss.backward()
+                
+                optimizer.step()
+                optimizer.zero_grad()
 
-            train_loss += loss.item()
-            num_batches += 1
+                train_loss += loss.item()
+                num_batches += 1
+                
+                # update hession EMA
+                optimizer.update_hessian()
+                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / (num_batches)
 
@@ -336,20 +361,33 @@ def train_multitask(args):
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
 
-            optimizer.zero_grad()
-            logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-            
-            # we need a loss function that handles logits. maybe this one?
-            # paraphrasing is a binary task, so binary
-            # we get logits, so logits
-            # this one also has a sigmoid activation function
-            loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='sum') / args.batch_size
+            # SOPHIA
+            if num_batches % k != k - 1:
+                logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+                
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='sum') / args.batch_size
+                loss.backward()
+                
+                optimizer.step()
+                optimizer.zero_grad()
 
-            loss.backward()
-            optimizer.step()
+                train_loss += loss.item()
+                num_batches += 1
+            else:
+                logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+                
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='sum') / args.batch_size
+                loss.backward()
+                
+                optimizer.step(bs=4096)
+                optimizer.zero_grad()
 
-            train_loss += loss.item()
-            num_batches += 1
+                train_loss += loss.item()
+                num_batches += 1
+                
+                # update hession EMA
+                optimizer.update_hessian()
+                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / num_batches
         
@@ -391,28 +429,27 @@ def get_args():
                         choices=('pretrain', 'finetune'), default="pretrain")
     parser.add_argument("--use_gpu", action='store_true')
 
-    parser.add_argument("--sst_dev_out", type=str, default="predictions/sst-dev-output.csv")
-    parser.add_argument("--sst_test_out", type=str, default="predictions/sst-test-output.csv")
+    parser.add_argument("--sst_dev_out", type=str, default="predictions/sst-dev-output_sophia.csv")
+    parser.add_argument("--sst_test_out", type=str, default="predictions/sst-test-output_sophia.csv")
 
-    parser.add_argument("--para_dev_out", type=str, default="predictions/para-dev-output.csv")
-    parser.add_argument("--para_test_out", type=str, default="predictions/para-test-output.csv")
+    parser.add_argument("--para_dev_out", type=str, default="predictions/para-dev-output_sophia.csv")
+    parser.add_argument("--para_test_out", type=str, default="predictions/para-test-output_sophia.csv")
 
-    parser.add_argument("--sts_dev_out", type=str, default="predictions/sts-dev-output.csv")
-    parser.add_argument("--sts_test_out", type=str, default="predictions/sts-test-output.csv")
+    parser.add_argument("--sts_dev_out", type=str, default="predictions/sts-dev-output_sophia.csv")
+    parser.add_argument("--sts_test_out", type=str, default="predictions/sts-test-output_sophia.csv")
 
     # hyper parameters
-    parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=64)
+    parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=8)
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
-                        default=1e-3)
-    parser.add_argument("--local_files_only", action='store_true')
+                        default=1e-5)
 
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
+    args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask_sophia.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility
     train_multitask(args)
     test_model(args)

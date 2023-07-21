@@ -13,6 +13,9 @@ from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
 
+# import SOPHIA
+from optimizer_sophia import SophiaG
+
 
 TQDM_DISABLE=False
 # fix the random seed
@@ -35,7 +38,7 @@ class BertSentimentClassifier(torch.nn.Module):
     def __init__(self, config):
         super(BertSentimentClassifier, self).__init__()
         self.num_labels = config.num_labels
-        self.bert = BertModel.from_pretrained('bert-base-uncased', local_files_only=args.local_files_only)
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
 
         # Pretrain mode does not require updating bert paramters.
         for param in self.bert.parameters():
@@ -88,7 +91,7 @@ class SentimentDataset(Dataset):
     def __init__(self, dataset, args):
         self.dataset = dataset
         self.p = args
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', local_files_only=args.local_files_only)
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     def __len__(self):
         return len(self.dataset)
@@ -126,7 +129,7 @@ class SentimentTestDataset(Dataset):
     def __init__(self, dataset, args):
         self.dataset = dataset
         self.p = args
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', local_files_only=args.local_files_only)
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
     def __len__(self):
         return len(self.dataset)
@@ -273,8 +276,7 @@ def train(args):
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option,
-              'local_files_only': args.local_files_only}
+              'option': args.option}
 
     config = SimpleNamespace(**config)
 
@@ -282,7 +284,12 @@ def train(args):
     model = model.to(device)
 
     lr = args.lr
-    optimizer = AdamW(model.parameters(), lr=lr)
+    # SOPHIA hardcoded
+    # values from official implementation:
+    # optimizer = SophiaG(model.parameters(), lr=2e-4, betas=(0.965, 0.99), rho = 0.01, weight_decay=1e-1)
+    # same lr and regularization as AdamW:
+    optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01)
+    # optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
 
     # Run for the specified number of epochs
@@ -290,6 +297,9 @@ def train(args):
         model.train()
         train_loss = 0
         num_batches = 0
+        
+        k = 10
+        
         for batch in tqdm(train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                        batch['attention_mask'], batch['labels'])
@@ -298,15 +308,33 @@ def train(args):
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
 
-            optimizer.zero_grad()
-            logits = model(b_ids, b_mask)
-            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+            # SOPHIA
+            if num_batches % k != k - 1:                        
+                logits = model(b_ids, b_mask)
+                
+                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                loss.backward()
+                
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
 
-            loss.backward()
-            optimizer.step()
+                train_loss += loss.item()
+                num_batches += 1
+            else:              
+                logits = model(b_ids, b_mask)
+                
+                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum') / args.batch_size
+                loss.backward()
+                
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
 
-            train_loss += loss.item()
-            num_batches += 1
+                train_loss += loss.item()
+                num_batches += 1
+                
+                # update hessian EMA
+                optimizer.update_hessian()
+                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / (num_batches)
 
@@ -368,7 +396,6 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
-    parser.add_argument("--local_files_only", action='store_true')
 
     args = parser.parse_args()
     return args
@@ -380,7 +407,7 @@ if __name__ == "__main__":
 
     print('Training Sentiment Classifier on SST...')
     config = SimpleNamespace(
-        filepath='sst-classifier.pt',
+        filepath='sst-classifier_sophia.pt',
         lr=args.lr,
         use_gpu=args.use_gpu,
         epochs=args.epochs,
@@ -390,9 +417,8 @@ if __name__ == "__main__":
         dev='data/ids-sst-dev.csv',
         test='data/ids-sst-test-student.csv',
         option=args.option,
-        dev_out = 'predictions/'+args.option+'-sst-dev-out.csv',
-        test_out = 'predictions/'+args.option+'-sst-test-out.csv',
-        local_files_only=args.local_files-only
+        dev_out = 'predictions/'+args.option+'-sst-dev-out_sophiag.csv',
+        test_out = 'predictions/'+args.option+'-sst-test-out_sophiag.csv'
     )
 
     train(config)
