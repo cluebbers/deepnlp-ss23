@@ -14,11 +14,13 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
-from evaluation import model_eval_sst, test_model_multitask
+from evaluation import test_model_multitask
 
 # CLL import multitask evaluation
 from evaluation import model_eval_multitask
 from torch.utils.tensorboard import SummaryWriter
+# import SOPHIA
+from optimizer_sophia import SophiaG
 
 # changed by CLL
 # TQDM_DISABLE=True
@@ -243,9 +245,20 @@ def train_multitask(args):
 
     model = MultitaskBERT(config)
     model = model.to(device)
-
+    
+    # optimizer choice 
+    # AdamW or SophiaG
     lr = args.lr
-    optimizer = AdamW(model.parameters(), lr=lr)
+    weight_decay = args.weight_decay
+
+    if args.optimizer == "sophiag":
+        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
+        #how often to update the hessian?
+        k = args.k_for_sophia
+    else:
+        optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+        
+        
     best_dev_acc = 0
 
     # Run for the specified number of epochs
@@ -266,7 +279,7 @@ def train_multitask(args):
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             similarity = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
             # we need a loss function for similarity
             # there are different degrees of similarity
@@ -279,6 +292,12 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
+            
+            # SOPHIA
+            # update hession EMA
+            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
+                optimizer.update_hessian()
+                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / num_batches
         # tensorboard
@@ -309,6 +328,12 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
+            
+            # SOPHIA
+            # update hession EMA
+            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
+                optimizer.update_hessian()
+                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / (num_batches)
         
@@ -351,6 +376,12 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
+            
+            # SOPHIA
+            # update hession EMA
+            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
+                optimizer.update_hessian()
+                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / num_batches
         
@@ -452,7 +483,10 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-3)
-    parser.add_argument("--local_files_only", action='store_true')
+    parser.add_argument("--local_files_only", action='store_true'),
+    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw"),
+    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0.01),
+    parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)
 
     args = parser.parse_args()
     return args
@@ -463,7 +497,7 @@ if __name__ == "__main__":
     seed_everything(args.seed)  # fix the seed for reproducibility
     
     # tensorboard writer
-    writer = SummaryWriter()
+    writer = SummaryWriter(f'runs/{args.optimizer}-lr={args.lr}')
     train_multitask(args)
     
     # TODO: uncomment for finalizing part 2

@@ -28,7 +28,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Run the script:
-python -u multiclass_classifier.py --use_gpu --option finetune
+python -u multiclass_classifier.py --use_gpu --option finetune --lr 1e-5
 
 # Run the script with logger:
 #python -u train_with_logger.py -l ~/${SLURM_JOB_NAME}_${SLURM_JOB_ID}  -t True -p True -d True -s True -f True
