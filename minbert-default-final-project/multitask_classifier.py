@@ -360,20 +360,39 @@ def train_multitask(args):
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
         
         # evaluation
-        train_para_acc, _, _, train_sst_acc, _, _, train_sts_corr, *_ = model_eval_multitask(sst_train_dataloader,
-                                                                                             para_train_dataloader,
-                                                                                             sts_train_dataloader,
-                                                                                             model, device)
+        (train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
+         train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
+         train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
+                                                    para_train_dataloader,
+                                                    sts_train_dataloader,
+                                                    model, device)
         
-        dev_para_acc, _, _, dev_sst_acc, _, _, dev_sts_cor, *_ = model_eval_multitask(sst_dev_dataloader,
-                                                                                       para_dev_dataloader,
-                                                                                       sts_dev_dataloader,
-                                                                                       model, device)        
+        (dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
+         dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
+         dev_sts_cor, *_ )= model_eval_multitask(sst_dev_dataloader,
+                                                 para_dev_dataloader,
+                                                 sts_dev_dataloader,
+                                                 model, device)        
         # tensorboard
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
         writer.add_scalar("para/dev-acc", dev_para_acc, epoch)
+        writer.add_scalar("para/train-prec", train_para_prec, epoch)
+        writer.add_scalar("para/dev-prec", dev_para_prec, epoch)
+        writer.add_scalar("para/train-rec", train_para_rec, epoch)
+        writer.add_scalar("para/dev-rec", dev_para_rec, epoch)
+        writer.add_scalar("para/train-f1", train_para_f1, epoch)
+        writer.add_scalar("para/dev-f1", dev_para_f1, epoch)
+                          
+        
         writer.add_scalar("sst/train-acc", train_sst_acc, epoch)
         writer.add_scalar("sst/dev-acc", dev_sst_acc, epoch)
+        writer.add_scalar("sst/train-prec", train_sst_prec, epoch)
+        writer.add_scalar("sst/dev-prec", dev_sst_prec, epoch)
+        writer.add_scalar("sst/train-rec", train_sst_rec, epoch)
+        writer.add_scalar("sst/dev-rec", dev_sst_rec, epoch)
+        writer.add_scalar("sst/train-f1", train_sst_f1, epoch)
+        writer.add_scalar("sst/dev-f1", dev_sst_f1, epoch)
+        
         writer.add_scalar("sts/train-cor", train_sts_corr, epoch)
         writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)
         
