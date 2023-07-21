@@ -146,9 +146,9 @@ def model_eval_multitask(sentiment_dataloader,
 
         # sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
         sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
-        sentiment_precision = precision_score(sst_y_true, sst_y_pred)
-        sentiment_recall = recall_score(sst_y_true, sst_y_pred)
-        sentiment_f1 = f1_score(sst_y_true, sst_y_pred)
+        sentiment_precision = precision_score(sst_y_true, sst_y_pred, average=None)
+        sentiment_recall = recall_score(sst_y_true, sst_y_pred, average=None)
+        sentiment_f1 = f1_score(sst_y_true, sst_y_pred, average=None)
 
         print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
         print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
