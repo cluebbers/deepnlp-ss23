@@ -253,6 +253,9 @@ def train_multitask(args):
         model.train()
         total_loss = 0
         num_batches = 0
+        
+        # TODO only trains for one batch? 755 iterations
+        # maybe only combine sst and para since they perform much better
         for (sst_batch, para_batch, sts_batch) in tqdm(zip(sst_train_dataloader, para_train_dataloader, sts_train_dataloader),
                                                        desc=f'train-{epoch}', disable=TQDM_DISABLE):
             
