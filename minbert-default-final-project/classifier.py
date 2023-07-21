@@ -35,7 +35,7 @@ class BertSentimentClassifier(torch.nn.Module):
     def __init__(self, config):
         super(BertSentimentClassifier, self).__init__()
         self.num_labels = config.num_labels
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.bert = BertModel.from_pretrained('bert-base-uncased', local_files_only=args.local_files_only)
 
         # Pretrain mode does not require updating bert paramters.
         for param in self.bert.parameters():
@@ -88,7 +88,7 @@ class SentimentDataset(Dataset):
     def __init__(self, dataset, args):
         self.dataset = dataset
         self.p = args
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', local_files_only=args.local_files_only)
 
     def __len__(self):
         return len(self.dataset)
@@ -126,7 +126,7 @@ class SentimentTestDataset(Dataset):
     def __init__(self, dataset, args):
         self.dataset = dataset
         self.p = args
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', local_files_only=args.local_files_only)
 
     def __len__(self):
         return len(self.dataset)
@@ -273,7 +273,8 @@ def train(args):
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option}
+              'option': args.option,
+              'local_files_only': args.local_files_only}
 
     config = SimpleNamespace(**config)
 
@@ -367,6 +368,7 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
+    parser.add_argument("--local_files_only", action='store_true')
 
     args = parser.parse_args()
     return args
@@ -389,7 +391,8 @@ if __name__ == "__main__":
         test='data/ids-sst-test-student.csv',
         option=args.option,
         dev_out = 'predictions/'+args.option+'-sst-dev-out.csv',
-        test_out = 'predictions/'+args.option+'-sst-test-out.csv'
+        test_out = 'predictions/'+args.option+'-sst-test-out.csv',
+        local_files_only=args.local_files-only
     )
 
     train(config)
