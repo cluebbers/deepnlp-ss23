@@ -315,14 +315,7 @@ def train_multitask(args):
         # tensorboard
         writer.add_scalar("sst/loss", train_loss, epoch)
 
-        train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
-        dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
-
-        if dev_acc > best_dev_acc:
-            best_dev_acc = dev_acc
-            save_model(model, optimizer, args, config, args.filepath)
-
-        print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+        print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}")
         
         # train on paraphrasing
         # CLL add training on other tasks
@@ -365,6 +358,30 @@ def train_multitask(args):
         writer.add_scalar("para/loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
+        
+        # evaluation
+        train_para_acc, _, _, train_sst_acc, _, _, train_sts_corr, *_ = model_eval_multitask(sst_train_dataloader,
+                                                                                             para_train_dataloader,
+                                                                                             sts_train_dataloader,
+                                                                                             model, device)
+        
+        dev_para_acc, _, _, dev_sst_acc, _, _, dev_sts_cor, *_ = model_eval_multitask(sst_dev_dataloader,
+                                                                                       para_dev_dataloader,
+                                                                                       sts_dev_dataloader,
+                                                                                       model, device)        
+        # tensorboard
+        writer.add_scalar("para/train-acc", train_para_acc, epoch)
+        writer.add_scalar("para/dev-acc", dev_para_acc, epoch)
+        writer.add_scalar("sst/train-acc", train_sst_acc, epoch)
+        writer.add_scalar("sst/dev-acc", dev_sst_acc, epoch)
+        writer.add_scalar("sts/train-cor", train_sts_corr, epoch)
+        writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)
+        
+
+        # TODO: save model
+        # if dev_acc > best_dev_acc:
+        #     best_dev_acc = dev_acc
+        #     save_model(model, optimizer, args, config, args.filepath)
 
 
 def test_model(args):
@@ -429,7 +446,9 @@ if __name__ == "__main__":
     # tensorboard writer
     writer = SummaryWriter()
     train_multitask(args)
-    test_model(args)
+    
+    # TODO: uncomment for finalizing part 2
+    # test_model(args)
     
     # close tensorboard writer
     writer.flush()
