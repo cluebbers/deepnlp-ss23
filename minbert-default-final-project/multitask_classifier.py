@@ -66,8 +66,8 @@ class MultitaskBERT(nn.Module):
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
         
-        # linear classifier
-        self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
+        # linear sentiment classifier
+        self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
         
         # paraphrase classifier
         # double hidden size do concatenate both sentences
@@ -105,7 +105,7 @@ class MultitaskBERT(nn.Module):
         pooled = self.dropout(pooled)
         
         # and then projecting it using a linear layer.
-        sentiment_logit = self.classifier(pooled)
+        sentiment_logit = self.sentiment_classifier(pooled)
         
         return sentiment_logit
         # raise NotImplementedError
@@ -169,12 +169,12 @@ class MultitaskBERT(nn.Module):
         # +1 to get to [0, 2]
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
-        # similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
+        similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
         #make similarity a torch variable to enable gradient updates
         # similarity = Variable(similarity, requires_grad=True)
         
         # without scaling
-        similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
+        # similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1) 
         
         return similarity
         # raise NotImplementedError
@@ -298,6 +298,9 @@ def train_multitask(args):
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
                 optimizer.zero_grad(set_to_none=True)
+            
+            # TODO for testing
+            #break
 
         train_loss = train_loss / num_batches
         # tensorboard
@@ -334,6 +337,9 @@ def train_multitask(args):
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
                 optimizer.zero_grad(set_to_none=True)
+                
+            # TODO for testing
+            #break
 
         train_loss = train_loss / (num_batches)
         
@@ -382,6 +388,9 @@ def train_multitask(args):
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
                 optimizer.zero_grad(set_to_none=True)
+                
+            # TODO for testing
+            #break
 
         train_loss = train_loss / num_batches
         
@@ -412,23 +421,35 @@ def train_multitask(args):
         writer.add_scalar("para/train-rec", train_para_rec, epoch)
         writer.add_scalar("para/dev-rec", dev_para_rec, epoch)
         writer.add_scalar("para/train-f1", train_para_f1, epoch)
-        writer.add_scalar("para/dev-f1", dev_para_f1, epoch)
-                          
+        writer.add_scalar("para/dev-f1", dev_para_f1, epoch)                          
         
         writer.add_scalar("sst/train-acc", train_sst_acc, epoch)
         writer.add_scalar("sst/dev-acc", dev_sst_acc, epoch)
-        writer.add_scalar("sst/train-prec", train_sst_prec, epoch)
-        writer.add_scalar("sst/dev-prec", dev_sst_prec, epoch)
-        writer.add_scalar("sst/train-rec", train_sst_rec, epoch)
-        writer.add_scalar("sst/dev-rec", dev_sst_rec, epoch)
-        writer.add_scalar("sst/train-f1", train_sst_f1, epoch)
-        writer.add_scalar("sst/dev-f1", dev_sst_f1, epoch)
+        
+        for i, class_precision in enumerate(train_sst_prec):
+            writer.add_scalar(f"sst/train-prec/class_{i}", class_precision, epoch)
+                       
+        for i, class_precision in enumerate(dev_sst_prec):
+            writer.add_scalar(f"sst/dev-prec/class_{i}", class_precision, epoch)
+
+        for i, class_recall in enumerate(train_sst_rec):
+            writer.add_scalar(f"sst/train-rec/class_{i}", class_recall, epoch)
+
+        for i, class_recall in enumerate(dev_sst_rec):
+            writer.add_scalar(f"sst/dev-rec/class_{i}", class_recall, epoch)
+            
+        for i, class_f1 in enumerate(train_sst_f1):
+            writer.add_scalar(f"sst/train-f1/class_{i}", class_f1, epoch)    
+
+        for i, class_f1 in enumerate(dev_sst_f1):
+            writer.add_scalar(f"sst/dev-f1/class_{i}", class_f1, epoch)
         
         writer.add_scalar("sts/train-cor", train_sts_corr, epoch)
         writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)
         
 
-        # TODO: save model
+        # TODO: save model 
+        # and maybe use writer.add_hparams() to save parameters and accuracy in tensorboard
         # if dev_acc > best_dev_acc:
         #     best_dev_acc = dev_acc
         #     save_model(model, optimizer, args, config, args.filepath)

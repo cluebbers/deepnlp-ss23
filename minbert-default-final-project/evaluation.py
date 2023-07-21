@@ -70,7 +70,7 @@ def model_eval_multitask(sentiment_dataloader,
         para_sent_ids = []
 
         # Evaluate paraphrase detection.
-        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval-para', disable=TQDM_DISABLE)):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -89,20 +89,23 @@ def model_eval_multitask(sentiment_dataloader,
             para_y_pred.extend(y_hat)
             para_y_true.extend(b_labels)
             para_sent_ids.extend(b_sent_ids)
+            
+            #TODO
+            #break
 
         # paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
         paraphrase_accuracy = accuracy_score(para_y_true, para_y_pred)
-        paraphrase_precision = precision_score(para_y_true, para_y_pred)
-        paraphrase_recall = recall_score(para_y_true, para_y_pred)
-        paraphrase_f1 = f1_score(para_y_true, para_y_pred)
+        paraphrase_precision = precision_score(para_y_true, para_y_pred, average="binary")
+        paraphrase_recall = recall_score(para_y_true, para_y_pred, average="binary")
+        paraphrase_f1 = f1_score(para_y_true, para_y_pred, average="binary")
 
         sts_y_true = []
         sts_y_pred = []
         sts_sent_ids = []
 
 
-        # Evaluate semantic textual similarity.
-        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        # Evaluate semantic textual similarity. (sts)
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval-sts', disable=TQDM_DISABLE)):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -121,6 +124,10 @@ def model_eval_multitask(sentiment_dataloader,
             sts_y_pred.extend(y_hat)
             sts_y_true.extend(b_labels)
             sts_sent_ids.extend(b_sent_ids)
+            
+            #TODO
+            #break
+        
         pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
         sts_corr = pearson_mat[1][0]
 
@@ -129,8 +136,8 @@ def model_eval_multitask(sentiment_dataloader,
         sst_y_pred = []
         sst_sent_ids = []
 
-        # Evaluate sentiment classification.
-        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+        # Evaluate sentiment classification. (sst)
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval-sst', disable=TQDM_DISABLE)):
             b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
 
             b_ids = b_ids.to(device)
@@ -143,6 +150,9 @@ def model_eval_multitask(sentiment_dataloader,
             sst_y_pred.extend(y_hat)
             sst_y_true.extend(b_labels)
             sst_sent_ids.extend(b_sent_ids)
+            
+            #TODO
+            #break
 
         # sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
         sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
