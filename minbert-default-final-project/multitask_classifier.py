@@ -18,13 +18,16 @@ from evaluation import test_model_multitask
 
 # CLL import multitask evaluation
 from evaluation import model_eval_multitask
+# tensorboard
 from torch.utils.tensorboard import SummaryWriter
-# import SOPHIA
+# SOPHIA
 from optimizer_sophia import SophiaG
+# profiling
+from torch.profiler import profile, record_function, ProfilerActivity
 
 # changed by CLL
 # TQDM_DISABLE=True
-TQDM_DISABLE=False
+TQDM_DISABLE=True
 
 # fix the random seed
 def seed_everything(seed=11711):
@@ -197,9 +200,9 @@ def save_model(model, optimizer, args, config, filepath):
     print(f"save the model to {filepath}")
 
 
-## Currently only trains on sst dataset
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+       
     # Load data
     # Create the data and its corresponding datasets and dataloader
     sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
@@ -257,22 +260,42 @@ def train_multitask(args):
         k = args.k_for_sophia
     else:
         optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    
+    # tensorboard writer
+    writer = SummaryWriter()
+    
+    # profiler
+    profiler = args.profiler
+    if profiler:            
+        prof = torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CPU,torch.profiler.ProfilerActivity.CUDA],
+                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
+                on_trace_ready=torch.profiler.tensorboard_trace_handler("runs/profiler"),
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=False)
         
-        
-    best_dev_acc = 0
-
+    best_dev_acc = 0    
+            
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
-        
+                
         #train on semantic textual similarity (sts)
+        
+        # profiler start
+        if profiler:
+            prof.start()
+        
         model.train()
         train_loss = 0
-        num_batches = 0
-        for batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+        num_batches = 0        
+         
+        for batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):#
+            
             b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
                                                           batch['token_ids_2'], batch['attention_mask_2'],
-                                                          batch['labels']
-            )
+                                                          batch['labels'])
+            
             b_ids1 = b_ids1.to(device)
             b_mask1 = b_mask1.to(device)
             b_ids2 = b_ids2.to(device)
@@ -299,6 +322,13 @@ def train_multitask(args):
                 optimizer.update_hessian()
                 optimizer.zero_grad(set_to_none=True)
             
+            # profiling step
+            if profiler:
+                prof.step()
+                 # stop after wait + warmup +active *repeat
+                if num_batches >= (1 + 1 + 3):
+                    break   
+            
             # TODO for testing
             #break
 
@@ -308,13 +338,21 @@ def train_multitask(args):
         
         print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
         
-
+        # profiler
+        if profiler:
+            prof.stop()      
 
         # train on sentiment analysis
+        
+        # profiler
+        if profiler:
+            prof.start()
+        
         model.train()
         train_loss = 0
         num_batches = 0
         for batch in tqdm(sst_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+            
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                        batch['attention_mask'], batch['labels'])
 
@@ -336,7 +374,14 @@ def train_multitask(args):
             # update hession EMA
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
-                optimizer.zero_grad(set_to_none=True)
+                optimizer.zero_grad()
+                
+            # profiling step
+            if profiler:
+                prof.step()
+                 # stop after wait + warmup +active +repeat
+                if num_batches >= (1 + 1 + 3):
+                    break   
                 
             # TODO for testing
             #break
@@ -348,20 +393,30 @@ def train_multitask(args):
 
         print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}")
         
+        # profiler
+        if profiler:
+            prof.stop()
+        
         # train on paraphrasing
         # CLL add training on other tasks
         # paraphrasing
         # see evaluation.py line 72
+        
+        # profiler
+        if profiler:
+            prof.start()
+        
         model.train()
         train_loss = 0
         num_batches = 0
         
         # datasets.py line 145
-        for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+        for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):            
+            
             b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
                                                           batch['token_ids_2'], batch['attention_mask_2'],
-                                                          batch['labels']
-            )
+                                                          batch['labels'])
+            
             b_ids1 = b_ids1.to(device)
             b_mask1 = b_mask1.to(device)
             b_ids2 = b_ids2.to(device)
@@ -388,6 +443,13 @@ def train_multitask(args):
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
                 optimizer.zero_grad(set_to_none=True)
+            
+            # profiling step
+            if profiler:
+                prof.step()
+                 # stop after wait + warmup +active +repeat
+                if num_batches >= (1 + 1 + 3):
+                    break   
                 
             # TODO for testing
             #break
@@ -399,6 +461,11 @@ def train_multitask(args):
         
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
         
+        # profiler stop after one epoch
+        if profiler:
+            prof.stop()
+            break
+                
         # evaluation
         (train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
          train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
@@ -447,7 +514,10 @@ def train_multitask(args):
         writer.add_scalar("sts/train-cor", train_sts_corr, epoch)
         writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)
         
-
+        # close tensorboard writer
+        writer.flush()
+        writer.close()
+                            
         # TODO: save model 
         # and maybe use writer.add_hparams() to save parameters and accuracy in tensorboard
         # if dev_acc > best_dev_acc:
@@ -507,7 +577,8 @@ def get_args():
     parser.add_argument("--local_files_only", action='store_true'),
     parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw"),
     parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0.01),
-    parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)
+    parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
+    parser.add_argument("--profiler", action="store_true")
 
     args = parser.parse_args()
     return args
@@ -515,15 +586,8 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
-    seed_everything(args.seed)  # fix the seed for reproducibility
-    
-    # tensorboard writer
-    writer = SummaryWriter(f'runs/{args.optimizer}-lr={args.lr}')
+    seed_everything(args.seed)  # fix the seed for reproducibility    
     train_multitask(args)
     
     # TODO: uncomment for finalizing part 2
     # test_model(args)
-    
-    # close tensorboard writer
-    writer.flush()
-    writer.close()
