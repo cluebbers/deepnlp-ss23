@@ -1,33 +1,81 @@
->📋  A template README.md for code accompanying a Machine Learning paper
-# My Paper Title
+# G05 Language Ninjas
 
-This repository is the official implementation of [My Paper Title](https://arxiv.org/abs/2030.12345). 
+This repository is the Project for the Module M.Inf.2202 Deep Learning for Natural Language Processing.
 
->📋  Optional: include a graphic explaining your approach/main result, bibtex entry, link to demos, blog posts and tutorials
+https://gipplab.org/deep-learning-for-natural-language-processing/
+
 
 ## Methodology
+For my fellow project mates:
+- look at multitask_classifier.py This is the main file where the important things happen
+    - line 45: model definition
+    - 185: save model
+    - 200: training
+        - dataloader
+        - 249: optimizer
+        - 261: tensorboard start + profiler
+        - 280: epochs
+            - 292: sts
+            - 353: sst
+            - 413: qpq
+            - 470: evaluation
+    - 567: arguments (some added at bottom)
+- tensorboard
+    - to open tensorboard
+    ```
+    tensorboard --logdir runs
+    ```
+    - sections Accuracy, F1 and loss are for classifier.py only (SST)
+    - other sections are (currently) for the baseline run
+- as described in section Experiments and as Lukas already pointed out, our main issue seems to be overfitting
+- so my suggested work packages (milestones and issues, see [Gitlab](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones)) focus on that
+My priority issues would be
+1. [Error Analysis](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/6#tab-issues)
+    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/45
+    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/29
+    - some cool stuff with CAPTUM
+2. [Regularization](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/7#tab-issues) 
+    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/46
+    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/34
+    - tune regularization parameters with optuna
+3. [Sophia Optimizer](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/9#tab-issues)
+    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/48
+    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/49
+4. [Multitask finetuning](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/10#tab-issues)
+    - current implementation of multitask finetuning multitask_classifier_learning.py is **very** basic
+    - it could also work as regularization, since it not perfectly trains on the loss of every single task
+
+I suggest to test things locally. If applicable only on classifier.py It is the fastest task. 
+
+Or you use multitask_classifier.py and insert a break after a specific number of batches. If it works you can send it for a full run to the HPC.
 
 ## Experiments
-
-
+1. AdamW finetune 1e-5
+after 5 epochs no change in dev acc, while train nears 100 % for every task
+-> overfitting
+    - more data allowed?
 ## Requirements
 
-To install requirements:
+added requirements on top of standard project ones
 
 ```setup
-pip install -r requirements.txt
+pip install tensorboard
+pip install torch-tb-profiler
 ```
 
->📋  Describe how to set up the environment, e.g. pip/conda/docker commands, download datasets, etc...
+You can use setup.sh or setup_gwdg.sh to create an environment and install the needed packages.
 ## Training
 
-To train the model(s) in the paper, run this command:
+For the first part:
 
-```train
-python train.py --input-data <path_to_data> --alpha 10 --beta 20
+```Part 1
+python classifier.py --use_gpu --batch_size 10 --lr 1e-5 --epochs 10 --option finetune
 ```
 
->📋  Describe how to train the models, with example commands on how to train the models in your paper, including the full training procedure and appropriate hyperparameters.
+To create the baseline:
+```
+python multitask_classifier.py --use_gpu --batch_size 20 --lr 1e-5 --epochs 30 --option finetune
+```
 ## Evaluation
 
 To evaluate my model on ImageNet, run:
@@ -41,18 +89,23 @@ python eval.py --model-file mymodel.pth --benchmark imagenet
 
 You can download pretrained models here:
 
-- [My awesome model](https://drive.google.com/mymodel.pth) trained on ImageNet using parameters x,y,z. 
+- [Project repository](https://github.com/truas/minbert-default-final-project) 
 
 >📋  Give a link to where/how the pretrained models can be downloaded and how they were trained (if applicable).  Alternatively you can have an additional column in your results table with a link to the models.
 ## Results
 
 Our model achieves the following performance on :
 
-### [Image Classification on ImageNet](https://paperswithcode.com/sota/image-classification-on-imagenet)
+### Sentiment Analysis on Stanford Sentiment Treebank (SST)
+### Paraphrase Detection on Quora Dataset (QPQ)
 
-| Model name         | Top 1 Accuracy  | Top 5 Accuracy |
-| ------------------ |---------------- | -------------- |
-| My awesome model   |     85%         |      95%       |
+### Semantic Textual Similarity on SemEval STS Benchmark (STS)
+
+| Model name         | SST accuracy | QPQ accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Baseline  |     51 %         |      85 %       | 52 % |
+
+[Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0)
 
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
@@ -61,3 +114,12 @@ Our model achieves the following performance on :
 >📋  Pick a licence and describe how to contribute to your code repository. 
 
 ## Member Contributions
+Dawor, Moataz:
+
+Lübbers, Christopher L.: Part 1: Sentiment analysis with BERT; Part 2: multitask_classifier.MultitaskBERT, multitask_classifier.train_multitask, Tensorboard (metrics  + profiler), optimizer_sophia.py, Baseline
+
+Niegsch, Luaks*:
+
+Schmidt, Finn Paul:
+
+Thorns, Celine:
