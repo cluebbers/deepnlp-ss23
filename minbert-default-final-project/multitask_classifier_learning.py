@@ -14,14 +14,17 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
-from evaluation import model_eval_sst, test_model_multitask
+from evaluation import test_model_multitask
 
 # CLL import multitask evaluation
 from evaluation import model_eval_multitask
+# tensorboard
+from torch.utils.tensorboard import SummaryWriter
+# SOPHIA
+from optimizer_sophia import SophiaG
+# profiling
+from torch.profiler import profile, record_function, ProfilerActivity
 
-
-# changed by CLL
-# TQDM_DISABLE=True
 TQDM_DISABLE=False
 
 # fix the random seed
@@ -51,7 +54,7 @@ class MultitaskBERT(nn.Module):
         super(MultitaskBERT, self).__init__()
         # You will want to add layers here to perform the downstream tasks.
         # Pretrain mode does not require updating bert paramters.
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.bert = BertModel.from_pretrained('bert-base-uncased', local_files_only=config.local_files_only)
         for param in self.bert.parameters():
             if config.option == 'pretrain':
                 param.requires_grad = False
@@ -60,12 +63,15 @@ class MultitaskBERT(nn.Module):
         ### TODO
         self.hidden_size = BERT_HIDDEN_SIZE
         self.num_labels = N_SENTIMENT_CLASSES
+        
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
-        # linear classifier
-        self.classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
+        
+        # linear sentiment classifier
+        self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
+        
         # paraphrase classifier
-        # two neurons: paraphrase and not-paraphrase
+        # double hidden size do concatenate both sentences
         self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*2, 1)
 
         # raise NotImplementedError
@@ -80,6 +86,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         # the same as the first part in classifier.BertSentimentClassifier.forward
         pooled = self.bert(input_ids, attention_mask)['pooler_output']
+        
         return pooled
     
         # raise NotImplementedError
@@ -94,13 +101,13 @@ class MultitaskBERT(nn.Module):
         ### TODO
         # the same as in classifier.BertSentimentClassifier.forward        
         # input embeddings
-        pooled = self.forward(input_ids, attention_mask)
+        pooled = self.forward(input_ids, attention_mask)     
         
         # The class will then classify the sentence by applying dropout on the pooled output
         pooled = self.dropout(pooled)
-        
+            
         # and then projecting it using a linear layer.
-        sentiment_logit = self.classifier(pooled)
+        sentiment_logit = self.sentiment_classifier(pooled)
         
         return sentiment_logit
         # raise NotImplementedError
@@ -124,8 +131,8 @@ class MultitaskBERT(nn.Module):
         
         # cosine_similarity has ouput [-1, 1], so it needs rescaling
         # Reshape the similarity to fit the input shape of paraphrase_classifier
-        # similarity = similarity.view(-1, 1)          
-              
+        # similarity = similarity.view(-1, 1)  
+       
         # Generate the logit
         # paraphrase_logit = self.paraphrase_classifier(similarity)   
         # Remove the extra dimension added by paraphrase_classifier
@@ -136,8 +143,8 @@ class MultitaskBERT(nn.Module):
         
         # Element-wise product
         prod = pooled_1 * pooled_2
-        
-        # Concatenate difference and product        
+
+        # Concatenate difference and product
         pooled = torch.cat([diff, prod], dim=-1)
         
         paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
@@ -164,9 +171,7 @@ class MultitaskBERT(nn.Module):
         # +1 to get to [0, 2]
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
-        # similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) /2 * 5
-        #make similarity a torch variable to enable gradient updates
-        # similarity = Variable(similarity, requires_grad=True)
+        similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
         
         # without scaling
         similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
@@ -192,9 +197,9 @@ def save_model(model, optimizer, args, config, filepath):
     print(f"save the model to {filepath}")
 
 
-## Currently only trains on sst dataset
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+       
     # Load data
     # Create the data and its corresponding datasets and dataloader
     sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
@@ -233,7 +238,8 @@ def train_multitask(args):
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
-              'option': args.option}
+              'option': args.option,
+              'local_files_only': args.local_files_only}
 
     config = SimpleNamespace(**config)
 
@@ -242,13 +248,41 @@ def train_multitask(args):
 
     # TODO: maybe different learning rate for different tasks?
     lr = args.lr
-    
-    optimizer = AdamW(model.parameters(), lr=lr)
-    best_dev_acc = 0
+    weight_decay = args.weight_decay
 
+    if args.optimizer == "sophiag":
+        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
+        #how often to update the hessian?
+        k = args.k_for_sophia
+    else:
+        optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    
+    # tensorboard writer
+    writer = SummaryWriter()
+    
+    # profiler
+    profiler = args.profiler
+    if profiler:            
+        prof = torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CPU,torch.profiler.ProfilerActivity.CUDA],
+                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
+                on_trace_ready=torch.profiler.tensorboard_trace_handler("runs/profiler"),
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=False)
+        
+    best_para_dev_acc = 0
+    best_sst_dev_acc = 0
+    best_sts_dev_cor = 0
+                  
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
+                
+        #train on semantic textual similarity (sts)
         
+        # profiler start
+        if profiler:
+            prof.start()
         
         model.train()
         total_loss = 0
@@ -359,10 +393,15 @@ def get_args():
     parser.add_argument("--sts_test_out", type=str, default="predictions/sts-test-output.csv")
 
     # hyper parameters
-    parser.add_argument("--batch_size", help='sst: 64, cfimdb: 8 can fit a 12GB GPU', type=int, default=8)
+    parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=64)
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
-                        default=1e-5)
+                        default=1e-3)
+    parser.add_argument("--local_files_only", action='store_true'),
+    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw"),
+    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
+    parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
+    parser.add_argument("--profiler", action="store_true")
 
     args = parser.parse_args()
     return args
@@ -370,6 +409,8 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
-    seed_everything(args.seed)  # fix the seed for reproducibility
+    seed_everything(args.seed)  # fix the seed for reproducibility    
     train_multitask(args)
-    test_model(args)
+    
+    # TODO: uncomment for finalizing part 2
+    # test_model(args)
