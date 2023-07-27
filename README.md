@@ -30,6 +30,8 @@ For my fellow project mates:
 - as described in section Experiments and as Lukas already pointed out, our main issue seems to be overfitting
 - so my suggested work packages (milestones and issues, see [Gitlab](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones)) focus on that
 My priority issues would be
+0. https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/50
+0. https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/51
 1. [Error Analysis](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/6#tab-issues)
     - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/45
     - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/29
