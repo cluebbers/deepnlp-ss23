@@ -25,9 +25,7 @@ from optimizer_sophia import SophiaG
 # profiling
 from torch.profiler import profile, record_function, ProfilerActivity
 
-# changed by CLL
-# TQDM_DISABLE=True
-TQDM_DISABLE=True
+TQDM_DISABLE=False
 
 # fix the random seed
 def seed_everything(seed=11711):
@@ -88,6 +86,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         # the same as the first part in classifier.BertSentimentClassifier.forward
         pooled = self.bert(input_ids, attention_mask)['pooler_output']
+        
         return pooled
     
         # raise NotImplementedError
@@ -102,11 +101,11 @@ class MultitaskBERT(nn.Module):
         ### TODO
         # the same as in classifier.BertSentimentClassifier.forward        
         # input embeddings
-        pooled = self.forward(input_ids, attention_mask)
+        pooled = self.forward(input_ids, attention_mask)     
         
         # The class will then classify the sentence by applying dropout on the pooled output
         pooled = self.dropout(pooled)
-        
+            
         # and then projecting it using a linear layer.
         sentiment_logit = self.sentiment_classifier(pooled)
         
@@ -173,8 +172,6 @@ class MultitaskBERT(nn.Module):
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
         similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
-        #make similarity a torch variable to enable gradient updates
-        # similarity = Variable(similarity, requires_grad=True)
         
         # without scaling
         # similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1) 
@@ -275,8 +272,10 @@ def train_multitask(args):
                 profile_memory=True,
                 with_stack=False)
         
-    best_dev_acc = 0    
-            
+    best_para_dev_acc = 0
+    best_sst_dev_acc = 0
+    best_sts_dev_cor = 0
+                  
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
                 
@@ -290,7 +289,7 @@ def train_multitask(args):
         train_loss = 0
         num_batches = 0        
          
-        for batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):#
+        for batch in tqdm(sts_train_dataloader, desc=f'train-sts-{epoch}', disable=TQDM_DISABLE):#
             
             b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
                                                           batch['token_ids_2'], batch['attention_mask_2'],
@@ -351,7 +350,7 @@ def train_multitask(args):
         model.train()
         train_loss = 0
         num_batches = 0
-        for batch in tqdm(sst_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
+        for batch in tqdm(sst_train_dataloader, desc=f'train-sst-{epoch}', disable=TQDM_DISABLE):
             
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                        batch['attention_mask'], batch['labels'])
@@ -411,7 +410,7 @@ def train_multitask(args):
         num_batches = 0
         
         # datasets.py line 145
-        for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):            
+        for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
             
             b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
                                                           batch['token_ids_2'], batch['attention_mask_2'],
@@ -452,6 +451,8 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
+            # if num_batches > 855:
+            #     break
             #break
 
         train_loss = train_loss / num_batches
@@ -473,6 +474,22 @@ def train_multitask(args):
                                                     para_train_dataloader,
                                                     sts_train_dataloader,
                                                     model, device)
+         
+        # tensorboard   
+        writer.add_scalar("para/train-acc", train_para_acc, epoch)
+        writer.add_scalar("para/train-prec", train_para_prec, epoch)
+        writer.add_scalar("para/train-rec", train_para_rec, epoch)
+        writer.add_scalar("para/train-f1", train_para_f1, epoch)
+        
+        writer.add_scalar("sst/train-acc", train_sst_acc, epoch)
+        for i, class_precision in enumerate(train_sst_prec):
+            writer.add_scalar(f"sst/train-prec/class_{i}", class_precision, epoch)
+        for i, class_recall in enumerate(train_sst_rec):
+            writer.add_scalar(f"sst/train-rec/class_{i}", class_recall, epoch)  
+        for i, class_f1 in enumerate(train_sst_f1):
+            writer.add_scalar(f"sst/train-f1/class_{i}", class_f1, epoch)   
+            
+        writer.add_scalar("sts/train-cor", train_sts_corr, epoch) 
         
         (dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
          dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
@@ -480,43 +497,51 @@ def train_multitask(args):
                                                  para_dev_dataloader,
                                                  sts_dev_dataloader,
                                                  model, device)        
+
         # tensorboard
-        writer.add_scalar("para/train-acc", train_para_acc, epoch)
-        writer.add_scalar("para/dev-acc", dev_para_acc, epoch)
-        writer.add_scalar("para/train-prec", train_para_prec, epoch)
+        writer.add_scalar("para/dev-acc", dev_para_acc, epoch) 
         writer.add_scalar("para/dev-prec", dev_para_prec, epoch)
-        writer.add_scalar("para/train-rec", train_para_rec, epoch)
         writer.add_scalar("para/dev-rec", dev_para_rec, epoch)
-        writer.add_scalar("para/train-f1", train_para_f1, epoch)
-        writer.add_scalar("para/dev-f1", dev_para_f1, epoch)                          
-        
-        writer.add_scalar("sst/train-acc", train_sst_acc, epoch)
-        writer.add_scalar("sst/dev-acc", dev_sst_acc, epoch)
-        
-        for i, class_precision in enumerate(train_sst_prec):
-            writer.add_scalar(f"sst/train-prec/class_{i}", class_precision, epoch)
-                       
+        writer.add_scalar("para/dev-f1", dev_para_f1, epoch) 
+                                 
+        writer.add_scalar("sst/dev-acc", dev_sst_acc, epoch)        
         for i, class_precision in enumerate(dev_sst_prec):
-            writer.add_scalar(f"sst/dev-prec/class_{i}", class_precision, epoch)
-
-        for i, class_recall in enumerate(train_sst_rec):
-            writer.add_scalar(f"sst/train-rec/class_{i}", class_recall, epoch)
-
+            writer.add_scalar(f"sst/dev-prec/class_{i}", class_precision, epoch)       
         for i, class_recall in enumerate(dev_sst_rec):
-            writer.add_scalar(f"sst/dev-rec/class_{i}", class_recall, epoch)
-            
-        for i, class_f1 in enumerate(train_sst_f1):
-            writer.add_scalar(f"sst/train-f1/class_{i}", class_f1, epoch)    
-
+            writer.add_scalar(f"sst/dev-rec/class_{i}", class_recall, epoch)          
         for i, class_f1 in enumerate(dev_sst_f1):
-            writer.add_scalar(f"sst/dev-f1/class_{i}", class_f1, epoch)
+            writer.add_scalar(f"sst/dev-f1/class_{i}", class_f1, epoch)        
         
-        writer.add_scalar("sts/train-cor", train_sts_corr, epoch)
         writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)
         
-        # close tensorboard writer
-        writer.flush()
-        writer.close()
+        # store best results    
+        if dev_para_acc > best_para_dev_acc:
+            best_para_dev_acc = dev_para_acc
+        if dev_sst_acc > best_sst_dev_acc:
+            best_sst_dev_acc = dev_sst_acc
+        if dev_sts_cor > best_sts_dev_cor:
+            best_sts_dev_cor = dev_sts_cor 
+        
+        # cool down GPU    
+        if epoch %10 ==9:
+            time.sleep(60*5)                     
+        
+    # tensorboard
+    # collect all information of run    
+    writer.add_hparams({"epochs":args.epochs,
+                        "optimizer":args.optimizer, 
+                        "lr":args.lr, 
+                        "weight_decay":args.weight_decay,
+                        "k_for_sophia":args.k_for_sophia,
+                        "hidden_dropout_prob": args.hidden_dropout_prob,
+                        "batch_size":args.batch_size},
+                        {"para-dev-acc":best_para_dev_acc,
+                        "sst-dev-acc":best_sst_dev_acc,
+                        "sts-dev-cor":best_sts_dev_cor})
+        
+    # close tensorboard writer
+    writer.flush()
+    writer.close()
                             
         # TODO: save model 
         # and maybe use writer.add_hparams() to save parameters and accuracy in tensorboard
@@ -576,7 +601,7 @@ def get_args():
                         default=1e-3)
     parser.add_argument("--local_files_only", action='store_true'),
     parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw"),
-    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0.01),
+    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
     parser.add_argument("--profiler", action="store_true")
 
