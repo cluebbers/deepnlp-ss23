@@ -275,6 +275,7 @@ def train_multitask(args):
     best_para_dev_acc = 0
     best_sst_dev_acc = 0
     best_sts_dev_cor = 0
+    best_dev_acc = 0
                   
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -309,6 +310,7 @@ def train_multitask(args):
             # since it punishes a prediction that is far away from the truth disproportionately
             # more than a prediction that is close to the truth
             loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
+            loss.requires_grad = True
             loss.backward()
             optimizer.step()
 
@@ -325,11 +327,12 @@ def train_multitask(args):
             if profiler:
                 prof.step()
                  # stop after wait + warmup +active *repeat
-                if num_batches >= (1 + 1 + 3):
+                if num_batches >= (1+1+3):
                     break   
             
             # TODO for testing
-            #break
+            #if num_batches >=1:
+                #break
 
         train_loss = train_loss / num_batches
         # tensorboard
@@ -383,7 +386,8 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
-            #break
+            #if num_batches>=1:
+                #break
 
         train_loss = train_loss / (num_batches)
         
@@ -451,8 +455,8 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
-            # if num_batches > 855:
-            #     break
+            #if num_batches >= 1:
+                 #break
             #break
 
         train_loss = train_loss / num_batches
@@ -466,8 +470,9 @@ def train_multitask(args):
         if profiler:
             prof.stop()
             break
-                
+        
         # evaluation
+        
         (train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
          train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
          train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
@@ -545,10 +550,20 @@ def train_multitask(args):
                             
         # TODO: save model 
         # and maybe use writer.add_hparams() to save parameters and accuracy in tensorboard
-        # if dev_acc > best_dev_acc:
-        #     best_dev_acc = dev_acc
-        #     save_model(model, optimizer, args, config, args.filepath)
-
+        # take average of the two accuraies,for para and sst, and the correlation of sts
+        # normalize all three values to the interval (0,1) before taking average
+        # note that accuracies are already normalized
+    
+    dev_sts_cor_norm = (dev_sts_cor+1)/2 #correlation coefficient lies in (-1,1)
+    dev_acc = (dev_sts_cor_norm+dev_sst_acc+dev_para_acc)/3
+    
+    if dev_acc > best_dev_acc:
+        best_dev_acc = dev_acc
+        writer.add_hparams()
+        save_model(model, optimizer, args, config, args.filepath)
+    
+    # save each epoch of the trained model for error analysis
+    save_model(model,optimizer,args,config,"epoch"+str(epoch)+"-"+args.filepath)
 
 def test_model(args):
     with torch.no_grad():
@@ -610,9 +625,10 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'{args.option}-{args.epochs}-{args.lr}-multitask.pt' # save path
+    args.filepath = f'{args.option}-{args.lr}-multitask.pt' # save path
+    #args.filepath= "model_test.pt"
     seed_everything(args.seed)  # fix the seed for reproducibility    
     train_multitask(args)
     
     # TODO: uncomment for finalizing part 2
-    # test_model(args)
+    test_model(args)
