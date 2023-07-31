@@ -614,7 +614,7 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-3)
-    parser.add_argument("--local_files_only", action='store_true'),
+    parser.add_argument("--local_files_only", action='store_true', default = True),
     parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw"),
     parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
