@@ -392,7 +392,7 @@ if __name__ == "__main__":
         option=args.option,
         dev_out = 'predictions/'+args.option+'-sst-dev-out.csv',
         test_out = 'predictions/'+args.option+'-sst-test-out.csv',
-        local_files_only=args.local_files-only
+        local_files_only=args.local_files_only
     )
 
     train(config)
