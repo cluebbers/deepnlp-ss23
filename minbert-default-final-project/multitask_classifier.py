@@ -73,6 +73,9 @@ class MultitaskBERT(nn.Module):
         # paraphrase classifier
         # double hidden size do concatenate both sentences
         self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*2, 1)
+        
+        #cosine similarity classifier
+        self.similarity_classifier = torch.nn.CosineSimilarity()
 
         # raise NotImplementedError
 
@@ -108,6 +111,7 @@ class MultitaskBERT(nn.Module):
             
         # and then projecting it using a linear layer.
         sentiment_logit = self.sentiment_classifier(pooled)
+
         
         return sentiment_logit
         # raise NotImplementedError
@@ -171,8 +175,8 @@ class MultitaskBERT(nn.Module):
         # +1 to get to [0, 2]
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
-        similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
-        
+        #similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
+        similarity = (self.similarity_classifier(pooled_1,pooled_2)+1)*2.5
         # without scaling
         # similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1) 
         
@@ -310,7 +314,7 @@ def train_multitask(args):
             # since it punishes a prediction that is far away from the truth disproportionately
             # more than a prediction that is close to the truth
             loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
-            loss.requires_grad = True
+            #loss.requires_grad = True
             loss.backward()
             optimizer.step()
 
@@ -527,6 +531,27 @@ def train_multitask(args):
         if dev_sts_cor > best_sts_dev_cor:
             best_sts_dev_cor = dev_sts_cor 
         
+        # TODO: save model 
+        # and maybe use writer.add_hparams() to save parameters and accuracy in tensorboard
+        # take average of the two accuraies,for para and sst, and the correlation of sts
+        # normalize all three values to the interval (0,1) before taking average
+        # note that accuracies are already normalized
+        
+        dev_sts_cor_norm = (dev_sts_cor+1)/2 #correlation coefficient lies in (-1,1)
+        dev_acc = (dev_sts_cor_norm+dev_sst_acc+dev_para_acc)/3
+        
+        if dev_acc > best_dev_acc:
+            best_dev_acc = dev_acc
+            #writer.add_hparams()
+            save_model(model, optimizer, args, config, args.filepath)
+          
+        # save each epoch of the trained model for detailed error analysis
+        if  args.save:
+            save_model(model,optimizer,args,config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
+
+        
+        
+        
         # cool down GPU    
         if epoch %10 ==9:
             time.sleep(60*5)                     
@@ -547,25 +572,9 @@ def train_multitask(args):
     # close tensorboard writer
     writer.flush()
     writer.close()
-                            
-        # TODO: save model 
-        # and maybe use writer.add_hparams() to save parameters and accuracy in tensorboard
-        # take average of the two accuraies,for para and sst, and the correlation of sts
-        # normalize all three values to the interval (0,1) before taking average
-        # note that accuracies are already normalized
-    
-    dev_sts_cor_norm = (dev_sts_cor+1)/2 #correlation coefficient lies in (-1,1)
-    dev_acc = (dev_sts_cor_norm+dev_sst_acc+dev_para_acc)/3
-    
-    if dev_acc > best_dev_acc:
-        best_dev_acc = dev_acc
-        writer.add_hparams()
-        save_model(model, optimizer, args, config, args.filepath)
-    
-    # save each epoch of the trained model for detailed error analysis
-    if  args.save:
-        save_model(model,optimizer,args,config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
 
+    
+    
 def test_model(args):
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
@@ -630,7 +639,8 @@ if __name__ == "__main__":
     args = get_args()
     args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility    
+    #args.option = 'finetune'
+    #args.epochs = 1
     train_multitask(args)
-    
     # TODO: uncomment for finalizing part 2
     test_model(args)
