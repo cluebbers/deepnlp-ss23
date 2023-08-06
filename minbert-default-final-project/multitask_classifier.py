@@ -331,8 +331,8 @@ def train_multitask(args):
                     break   
             
             # TODO for testing
-            if num_batches >=1:
-                break
+            #if num_batches >=1:
+                #break
 
         train_loss = train_loss / num_batches
         # tensorboard
@@ -386,8 +386,8 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
-            if num_batches>=1:
-                break
+            #if num_batches>=1:
+                #break
 
         train_loss = train_loss / (num_batches)
         
