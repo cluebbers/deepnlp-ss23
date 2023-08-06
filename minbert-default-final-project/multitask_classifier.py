@@ -199,6 +199,7 @@ def save_model(model, optimizer, args, config, filepath):
 
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+
        
     # Load data
     # Create the data and its corresponding datasets and dataloader
@@ -279,7 +280,6 @@ def train_multitask(args):
                   
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
-                
         #train on semantic textual similarity (sts)
         
         # profiler start
@@ -331,8 +331,8 @@ def train_multitask(args):
                     break   
             
             # TODO for testing
-            #if num_batches >=1:
-                #break
+            if num_batches >=1:
+                break
 
         train_loss = train_loss / num_batches
         # tensorboard
@@ -386,8 +386,8 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
-            #if num_batches>=1:
-                #break
+            if num_batches>=1:
+                break
 
         train_loss = train_loss / (num_batches)
         
@@ -562,8 +562,9 @@ def train_multitask(args):
         writer.add_hparams()
         save_model(model, optimizer, args, config, args.filepath)
     
-    # save each epoch of the trained model for error analysis
-    save_model(model,optimizer,args,config,"epoch"+str(epoch)+"-"+args.filepath)
+    # save each epoch of the trained model for detailed error analysis
+    if  args.save:
+        save_model(model,optimizer,args,config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
 
 def test_model(args):
     with torch.no_grad():
@@ -619,14 +620,15 @@ def get_args():
     parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
     parser.add_argument("--profiler", action="store_true")
-
+    
+    parser.add_argument("--save", type=bool, default=True)
+    
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'{args.option}-{args.lr}-multitask.pt' # save path
-    #args.filepath= "model_test.pt"
+    args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility    
     train_multitask(args)
     
