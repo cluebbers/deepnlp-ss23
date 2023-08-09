@@ -13,8 +13,8 @@ class LinearSelfAttention(BertSelfAttention):
 	'''
 	def __init__(self, config):
 		super().__init__(config)
-		self.linear_alpha   = torch.nn.Linear(2, 1)
-		self.linear_beta    = torch.nn.Linear(2, 1)
+		self.linear_beta  = torch.nn.Linear(2, 1)
+		self.linear_alpha = torch.nn.Linear(2, 1)
 	
 	def attention(self, key: torch.Tensor, query: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor):
 		'''
@@ -27,9 +27,9 @@ class LinearSelfAttention(BertSelfAttention):
 
 		See issue #53 for the formula !!
 		'''
-		KQ = torch.stack([key, query], dim = -1)
-		WA = self.linear_alpha(KQ).squeeze()
-		WB = self.linear_beta(KQ).squeeze()
+		QK = torch.stack([query, key], dim = -1)
+		WA = self.linear_alpha(QK).squeeze()
+		WB = self.linear_beta(QK).squeeze()
 		return super().attention(WA, WB, value, attention_mask)
 
 
