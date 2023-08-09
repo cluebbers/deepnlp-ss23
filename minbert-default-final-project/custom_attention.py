@@ -33,7 +33,7 @@ class LinearSelfAttention(BertSelfAttention):
 		return super().attention(WA, WB, value, attention_mask)
 
 
-class SparsemaxSelfAttention(BertSelfAttentionBase):
+class SparsemaxSelfAttention(BertSelfAttention):
 	'''
 	The idea is to replace the softmax with sparsemax. The softmax
 	produces a lot of small data, but is never zero. Maybe this
@@ -63,12 +63,38 @@ class SparsemaxSelfAttention(BertSelfAttentionBase):
 		return attention
 
 
-class LinearSelfAttentionWithSparsemax(LinearSelfAttention, SparsemaxSelfAttention, BertSelfAttention):
+class CenterMatrixSelfAttention(BertSelfAttention):
 	'''
-	Basically combines both custom attention implementations. This
-	may look like its doing nothing, but we use dependency injection
-	to get linear self attention but replace softmax with sparsemax.
-	The idea is that combining both approaches might give us better
-	results.
+	The idea is to have one matrix in between: Q W K^T (from lecture).
 	'''
+	def __init__(self, config):
+		super().__init__(config)
+		self.linear_center = torch.nn.Linear(self.attention_head_size, self.attention_head_size)
+	
+	def attention(self, key: torch.Tensor, query: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor):
+		'''
+		key: [bs, num_attention_heads, seq_len, attention_head_size]
+		query: [bs, num_attention_heads, seq_len, attention_head_size]
+		value: [bs, num_attention_heads, seq_len, attention_head_size]
+		attention_mask: [bs, 1, 1, seq_len]
+		score: [bs, self.num_attention_heads, seq_len, seq_len]
+		output: [bs, seq_len, hidden_size]
+		'''
+		key = self.linear_center(key)
+		return super().attention(key, query, value, attention_mask)
+
+################################################################################
+# Combinations of the above ideas to see how well they work together.
+################################################################################
+
+class LinearSelfAttentionWithSparsemax(LinearSelfAttention, SparsemaxSelfAttention):
+	pass
+
+class CenterMatrixSelfAttentionWithSparsemax(CenterMatrixSelfAttention, SparsemaxSelfAttention):
+	pass
+
+class CenterMatrixLinearSelfAttention(LinearSelfAttention, CenterMatrixSelfAttention):
+	pass
+
+class CenterMatrixLinearSelfAttentionWithSparsemax(CenterMatrixLinearSelfAttention, SparsemaxSelfAttention):
 	pass
