@@ -89,6 +89,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         # the same as the first part in classifier.BertSentimentClassifier.forward
         pooled = self.bert(input_ids, attention_mask)['pooler_output']
+        pooled = self.dropout(pooled)
         
         return pooled
     
@@ -107,7 +108,7 @@ class MultitaskBERT(nn.Module):
         pooled = self.forward(input_ids, attention_mask)     
         
         # The class will then classify the sentence by applying dropout on the pooled output
-        pooled = self.dropout(pooled)
+        #pooled = self.dropout(pooled)
             
         # and then projecting it using a linear layer.
         sentiment_logit = self.sentiment_classifier(pooled)
@@ -264,7 +265,7 @@ def train_multitask(args):
         optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     
     # tensorboard writer
-    writer = SummaryWriter()
+    writer = SummaryWriter(comment = args.logdir)
     
     # profiler
     profiler = args.profiler
@@ -314,7 +315,8 @@ def train_multitask(args):
             # since it punishes a prediction that is far away from the truth disproportionately
             # more than a prediction that is close to the truth
             loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
-            #loss.requires_grad = True
+            if args.option == "pretrain":
+                loss.requires_grad = True
             loss.backward()
             optimizer.step()
 
@@ -335,12 +337,12 @@ def train_multitask(args):
                     break   
             
             # TODO for testing
-            #if num_batches >=1:
-                #break
+            if num_batches >= args.num_batches_sts:
+                break
 
         train_loss = train_loss / num_batches
         # tensorboard
-        writer.add_scalar("sts/loss", train_loss, epoch)
+        writer.add_scalar("sts/train_loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
         
@@ -390,13 +392,13 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
-            #if num_batches>=1:
-                #break
+            if num_batches>=args.num_batches_sst:
+                break
 
         train_loss = train_loss / (num_batches)
         
         # tensorboard
-        writer.add_scalar("sst/loss", train_loss, epoch)
+        writer.add_scalar("sst/train_loss", train_loss, epoch)
 
         print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}")
         
@@ -459,14 +461,14 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
-            #if num_batches >= 1:
-                 #break
-            #break
+            if num_batches >= args.num_batches_para:
+                 break
+            
 
         train_loss = train_loss / num_batches
         
         # tensorboard
-        writer.add_scalar("para/loss", train_loss, epoch)
+        writer.add_scalar("para/train_loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
         
@@ -477,9 +479,9 @@ def train_multitask(args):
         
         # evaluation
         
-        (train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
-         train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
-         train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
+        (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
+         _,train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
+         _,train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
                                                     para_train_dataloader,
                                                     sts_train_dataloader,
                                                     model, device)
@@ -500,14 +502,18 @@ def train_multitask(args):
             
         writer.add_scalar("sts/train-cor", train_sts_corr, epoch) 
         
-        (dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
-         dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
-         dev_sts_cor, *_ )= model_eval_multitask(sst_dev_dataloader,
+        (para_loss,dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
+         sst_loss,dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
+         sts_loss,dev_sts_cor, *_ )= model_eval_multitask(sst_dev_dataloader,
                                                  para_dev_dataloader,
                                                  sts_dev_dataloader,
                                                  model, device)        
 
         # tensorboard
+        writer.add_scalar("para/dev_loss", para_loss, epoch)
+        writer.add_scalar("sst/dev_loss", sst_loss, epoch)
+        writer.add_scalar("sts/dev_loss", sts_loss, epoch)
+        
         writer.add_scalar("para/dev-acc", dev_para_acc, epoch) 
         writer.add_scalar("para/dev-prec", dev_para_prec, epoch)
         writer.add_scalar("para/dev-rec", dev_para_rec, epoch)
@@ -604,7 +610,7 @@ def get_args():
     parser.add_argument("--sts_test", type=str, default="data/sts-test-student.csv")
 
     parser.add_argument("--seed", type=int, default=11711)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="pretrain")
@@ -621,6 +627,10 @@ def get_args():
 
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=64)
+    parser.add_argument("--num_batches_para", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
+    parser.add_argument("--num_batches_sst", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
+    parser.add_argument("--num_batches_sts", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
+    
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-3)
@@ -631,6 +641,7 @@ def get_args():
     parser.add_argument("--profiler", action="store_true")
     
     parser.add_argument("--save", type=bool, default=True)
+    parser.add_argument("--logdir", type=str, default='')
     
     args = parser.parse_args()
     return args
@@ -640,7 +651,8 @@ if __name__ == "__main__":
     args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path
     seed_everything(args.seed)  # fix the seed for reproducibility    
     #args.option = 'finetune'
-    #args.epochs = 1
+
+    
     train_multitask(args)
-    # TODO: uncomment for finalizing part 2
+
     test_model(args)

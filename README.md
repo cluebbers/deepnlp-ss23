@@ -106,8 +106,12 @@ Our model achieves the following performance on :
 | Model name         | SST accuracy | QPQ accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
 | Baseline  |     51 %         |      85 %       | 52 % |
+| ------------------ |---------------- | -------------- | ---
+| State-of-the-Art  |     59.8 %         |      90.7%       | 93% % |
+
 
 [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0)
+[State-of-the-Art](https://paperswithcode.com/sota/sentiment-analysis-on-sst-5-fine-grained)
 
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
