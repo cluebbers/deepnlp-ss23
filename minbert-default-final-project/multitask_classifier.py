@@ -648,10 +648,9 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path
+    args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path for model
     seed_everything(args.seed)  # fix the seed for reproducibility    
     #args.option = 'finetune'
-
     
     train_multitask(args)
 

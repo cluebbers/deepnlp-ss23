@@ -84,8 +84,17 @@ def model_eval_multitask(sentiment_dataloader,
             b_mask1 = b_mask1.to(device)
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
 
             logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+            
+            #dev_loss 
+            
+            loss = F.binary_cross_entropy_with_logits(logits, b_labels.float(), reduction='mean')
+            para_loss += loss.item()
+            num_batches+=1
+            
+            
             y_hat = logits.sigmoid().round().flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
@@ -93,10 +102,7 @@ def model_eval_multitask(sentiment_dataloader,
             para_y_true.extend(b_labels)
             para_sent_ids.extend(b_sent_ids)
             
-            #dev_loss 
-            loss = F.binary_cross_entropy_with_logits(logits, batch['labels'].float(), reduction='mean')
-            para_loss += loss.item()
-            num_batches+=1
+            
 
         
         para_loss = para_loss/num_batches #normalize loss
@@ -126,8 +132,15 @@ def model_eval_multitask(sentiment_dataloader,
             b_mask1 = b_mask1.to(device)
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
 
             logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+            
+            #dev loss
+            loss = F.mse_loss(logits, batch['labels'].float(), reduction='mean')
+            para_loss += loss.item()
+            num_batches+=1
+            
             y_hat = logits.flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
@@ -135,10 +148,7 @@ def model_eval_multitask(sentiment_dataloader,
             sts_y_true.extend(b_labels)
             sts_sent_ids.extend(b_sent_ids)
             
-            #dev loss
-            loss = F.mse_loss(logits, batch['labels'].float(), reduction='mean')
-            para_loss += loss.item()
-            num_batches+=1
+            
 
         
         sts_loss = sts_loss/num_batches #normalize loss
@@ -159,8 +169,15 @@ def model_eval_multitask(sentiment_dataloader,
 
             b_ids = b_ids.to(device)
             b_mask = b_mask.to(device)
+            b_labels = b_labels.to(device)
 
             logits = model.predict_sentiment(b_ids, b_mask)
+            
+            #Dev loss
+            loss = F.cross_entropy(logits, batch['labels'].view(-1), reduction='mean')
+            sst_loss += loss.item()
+            num_batches+=1
+            
             y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
@@ -168,13 +185,10 @@ def model_eval_multitask(sentiment_dataloader,
             sst_y_true.extend(b_labels)
             sst_sent_ids.extend(b_sent_ids)
             
-            #Dev loss
-            loss = F.cross_entropy(logits, batch['labels'].view(-1), reduction='mean')
-            sst_loss += loss.item()
-            num_batches+=1
+            
 
         
-        sst_loss = sst_loss/num_batches
+        sst_loss = sst_loss/num_batches #normalize loss
 
         # sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
         sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
