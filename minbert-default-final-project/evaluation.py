@@ -137,7 +137,7 @@ def model_eval_multitask(sentiment_dataloader,
             logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
             
             #dev loss
-            loss = F.mse_loss(logits, batch['labels'].float(), reduction='mean')
+            loss = F.mse_loss(logits, b_labels.float(), reduction='mean')
             para_loss += loss.item()
             num_batches+=1
             
@@ -174,7 +174,7 @@ def model_eval_multitask(sentiment_dataloader,
             logits = model.predict_sentiment(b_ids, b_mask)
             
             #Dev loss
-            loss = F.cross_entropy(logits, batch['labels'].view(-1), reduction='mean')
+            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
             sst_loss += loss.item()
             num_batches+=1
             
