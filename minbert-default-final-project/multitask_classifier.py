@@ -1,4 +1,5 @@
 from shared_classifier import *
+from datasets import *
 
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
@@ -6,15 +7,12 @@ from types import SimpleNamespace
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+
 from torch.autograd import Variable
 
 from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
-
-from datasets import SentenceClassificationDataset, SentencePairDataset, \
-    load_multitask_data, load_multitask_test_data
 
 from evaluation import test_model_multitask
 
@@ -172,40 +170,16 @@ class MultitaskBERT(nn.Module):
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
 
-       
-    # Load data
-    # Create the data and its corresponding datasets and dataloader
-    sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
-    sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
-
-    sst_train_data = SentenceClassificationDataset(sst_train_data, args)
-    sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
-    
-    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
-                                      collate_fn=sst_train_data.collate_fn)
-    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=sst_dev_data.collate_fn)
-    
-    # CLL added other datasets and loaders
-    # see evaluation.py line 229
-    # paraphrasing
-    para_train_data = SentencePairDataset(para_train_data, args)
-    para_dev_data = SentencePairDataset(para_dev_data, args)
-    
-    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
-                                      collate_fn=para_train_data.collate_fn)
-    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=para_dev_data.collate_fn)
-    # similarity
-    sts_train_data = SentencePairDataset(sts_train_data, args)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args)
-    
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
-                                      collate_fn=sts_train_data.collate_fn)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=sts_dev_data.collate_fn)   
-    # CLL end
-
+    # Load all the datasets and the corresponding loaders 
+    dataloaders = MultitaskDataloader(args)
+    sst_train_dataloader  = dataloaders.sst_train_dataloader
+    sst_dev_dataloader    = dataloaders.sst_dev_dataloader    
+    para_train_dataloader = dataloaders.para_train_dataloader
+    para_dev_dataloader   = dataloaders.para_dev_dataloader
+    sts_train_dataloader  = dataloaders.sts_train_dataloader
+    sts_dev_dataloader    = dataloaders.sts_dev_dataloader
+    num_labels            = dataloaders.num_labels
+  
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'num_labels': num_labels,

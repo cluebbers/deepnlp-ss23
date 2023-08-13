@@ -12,6 +12,7 @@ import csv
 
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 from tokenizer import BertTokenizer
 
 
@@ -307,3 +308,44 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
     print(f"Loaded {len(similarity_data)} {split} examples from {similarity_filename}")
 
     return sentiment_data, num_labels, paraphrase_data, similarity_data
+
+
+class MultitaskDataloader:
+    def __init__(self, args):
+        
+        common_dataloader_params = dict(
+            batch_size = args.batch_size,
+            num_workers = 4,
+            pin_memory = True
+        )
+
+        sst_train_data, num_labels, para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
+        sst_dev_data, num_labels, para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
+        sst_train_data = SentenceClassificationDataset(sst_train_data, args)
+        sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
+        sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, collate_fn=sst_train_data.collate_fn,
+                                        **common_dataloader_params)
+        sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, collate_fn=sst_dev_data.collate_fn,
+                                        **common_dataloader_params)
+        
+        para_train_data = SentencePairDataset(para_train_data, args)
+        para_dev_data = SentencePairDataset(para_dev_data, args)
+        para_train_dataloader = DataLoader(para_train_data, shuffle=True, collate_fn=para_train_data.collate_fn,
+                                        **common_dataloader_params)
+        para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, collate_fn=para_dev_data.collate_fn,
+                                        **common_dataloader_params)
+        
+        sts_train_data = SentencePairDataset(sts_train_data, args)
+        sts_dev_data = SentencePairDataset(sts_dev_data, args)
+        sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, collate_fn=sts_train_data.collate_fn,
+                                        **common_dataloader_params)
+        sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, collate_fn=sts_dev_data.collate_fn,
+                                        **common_dataloader_params)   
+        
+        self.sst_train_dataloader  = sst_train_dataloader
+        self.sst_dev_dataloader    = sst_dev_dataloader    
+        self.para_train_dataloader = para_train_dataloader
+        self.para_dev_dataloader   = para_dev_dataloader
+        self.sts_train_dataloader  = sts_train_dataloader
+        self.sts_dev_dataloader    = sts_dev_dataloader
+        self.num_labels            = num_labels
