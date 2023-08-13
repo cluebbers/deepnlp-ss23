@@ -59,10 +59,7 @@ def model_eval_sst(dataloader, model, device):
     return acc, f1, y_pred, y_true, sents, sent_ids
 
 # Perform model evaluation in terms by averaging accuracies across tasks.
-def model_eval_multitask(sentiment_dataloader,
-                         paraphrase_dataloader,
-                         sts_dataloader,
-                         model, device):
+def model_eval_multitask(model, device, dataloaders, dev):
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
@@ -73,27 +70,13 @@ def model_eval_multitask(sentiment_dataloader,
         num_batches = 0
 
         # Evaluate paraphrase detection.
-        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval-para', disable=TQDM_DISABLE)):
-            (b_ids1, b_mask1,
-             b_ids2, b_mask2,
-             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
-                          batch['token_ids_2'], batch['attention_mask_2'],
-                          batch['labels'], batch['sent_ids'])
-
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-            b_labels = b_labels.to(device)
+        for step, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels, b_sent_ids) in enumerate(dataloaders.iter_eval_para(dev)):
 
             logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-            
-            #dev_loss 
-            
+
             loss = F.binary_cross_entropy_with_logits(logits, b_labels.float(), reduction='mean')
             para_loss += loss.item()
             num_batches+=1
-            
             
             y_hat = logits.sigmoid().round().flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
@@ -102,9 +85,6 @@ def model_eval_multitask(sentiment_dataloader,
             para_y_true.extend(b_labels)
             para_sent_ids.extend(b_sent_ids)
             
-            
-
-        
         para_loss = para_loss/num_batches #normalize loss
 
         # paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
@@ -121,18 +101,7 @@ def model_eval_multitask(sentiment_dataloader,
 
 
         # Evaluate semantic textual similarity. (sts)
-        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval-sts', disable=TQDM_DISABLE)):
-            (b_ids1, b_mask1,
-             b_ids2, b_mask2,
-             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
-                          batch['token_ids_2'], batch['attention_mask_2'],
-                          batch['labels'], batch['sent_ids'])
-
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-            b_labels = b_labels.to(device)
+        for step, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels, b_sent_ids) in enumerate(dataloaders.iter_eval_sts(dev)):
 
             logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
             
@@ -148,9 +117,6 @@ def model_eval_multitask(sentiment_dataloader,
             sts_y_true.extend(b_labels)
             sts_sent_ids.extend(b_sent_ids)
             
-            
-
-        
         sts_loss = sts_loss/num_batches #normalize loss
         
         pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
@@ -164,12 +130,7 @@ def model_eval_multitask(sentiment_dataloader,
         num_batches = 0
 
         # Evaluate sentiment classification. (sst)
-        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval-sst', disable=TQDM_DISABLE)):
-            b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
-
-            b_ids = b_ids.to(device)
-            b_mask = b_mask.to(device)
-            b_labels = b_labels.to(device)
+        for step, (b_ids, b_mask, b_labels, b_sent_ids) in enumerate(dataloaders.iter_eval_sst(dev)):
 
             logits = model.predict_sentiment(b_ids, b_mask)
             
@@ -185,9 +146,6 @@ def model_eval_multitask(sentiment_dataloader,
             sst_y_true.extend(b_labels)
             sst_sent_ids.extend(b_sent_ids)
             
-            
-
-        
         sst_loss = sst_loss/num_batches #normalize loss
 
         # sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))

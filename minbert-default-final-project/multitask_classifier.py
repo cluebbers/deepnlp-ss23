@@ -171,13 +171,7 @@ def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
 
     # Load all the datasets and the corresponding loaders 
-    dataloaders = MultitaskDataloader(args)
-    sst_train_dataloader  = dataloaders.sst_train_dataloader
-    sst_dev_dataloader    = dataloaders.sst_dev_dataloader    
-    para_train_dataloader = dataloaders.para_train_dataloader
-    para_dev_dataloader   = dataloaders.para_dev_dataloader
-    sts_train_dataloader  = dataloaders.sts_train_dataloader
-    sts_dev_dataloader    = dataloaders.sts_dev_dataloader
+    dataloaders = MultitaskDataloader(args, device)
     num_labels            = dataloaders.num_labels
   
     # Init model
@@ -207,18 +201,7 @@ def train_multitask(args):
     
     # tensorboard writer
     writer = SummaryWriter(comment = args.logdir)
-    
-    # profiler
-    profiler = args.profiler
-    if profiler:            
-        prof = torch.profiler.profile(
-                activities=[torch.profiler.ProfilerActivity.CPU,torch.profiler.ProfilerActivity.CUDA],
-                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
-                on_trace_ready=torch.profiler.tensorboard_trace_handler("runs/profiler"),
-                record_shapes=True,
-                profile_memory=True,
-                with_stack=False)
-        
+
     best_para_dev_acc = 0
     best_sst_dev_acc = 0
     best_sts_dev_cor = 0
@@ -227,26 +210,11 @@ def train_multitask(args):
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
         #train on semantic textual similarity (sts)
-        
-        # profiler start
-        if profiler:
-            prof.start()
-        
         model.train()
         train_loss = 0
         num_batches = 0        
          
-        for batch in tqdm(sts_train_dataloader, desc=f'train-sts-{epoch}', disable=TQDM_DISABLE):#
-            
-            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
-                                                          batch['token_ids_2'], batch['attention_mask_2'],
-                                                          batch['labels'])
-            
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-            b_labels = b_labels.to(device)
+        for b_ids1, b_mask1, b_ids2, b_mask2, b_labels in dataloaders.iter_train_sts(epoch):
 
             optimizer.zero_grad(set_to_none=True)
             similarity = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
@@ -269,45 +237,19 @@ def train_multitask(args):
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
                 optimizer.zero_grad(set_to_none=True)
-            
-            # profiling step
-            if profiler:
-                prof.step()
-                 # stop after wait + warmup +active *repeat
-                if num_batches >= (1+1+3):
-                    break   
-            
-            # TODO for testing
-            if num_batches >= args.num_batches_sts:
-                break
 
         train_loss = train_loss / num_batches
         # tensorboard
         writer.add_scalar("sts/train_loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
-        
-        # profiler
-        if profiler:
-            prof.stop()      
 
         # train on sentiment analysis
-        
-        # profiler
-        if profiler:
-            prof.start()
-        
+
         model.train()
         train_loss = 0
         num_batches = 0
-        for batch in tqdm(sst_train_dataloader, desc=f'train-sst-{epoch}', disable=TQDM_DISABLE):
-            
-            b_ids, b_mask, b_labels = (batch['token_ids'],
-                                       batch['attention_mask'], batch['labels'])
-
-            b_ids = b_ids.to(device)
-            b_mask = b_mask.to(device)
-            b_labels = b_labels.to(device)
+        for b_ids, b_mask, b_labels in dataloaders.iter_train_sst(epoch):
 
             optimizer.zero_grad()
             logits = model.predict_sentiment(b_ids, b_mask)
@@ -324,17 +266,6 @@ def train_multitask(args):
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
                 optimizer.zero_grad()
-                
-            # profiling step
-            if profiler:
-                prof.step()
-                 # stop after wait + warmup +active +repeat
-                if num_batches >= (1 + 1 + 3):
-                    break   
-                
-            # TODO for testing
-            if num_batches>=args.num_batches_sst:
-                break
 
         train_loss = train_loss / (num_batches)
         
@@ -342,37 +273,20 @@ def train_multitask(args):
         writer.add_scalar("sst/train_loss", train_loss, epoch)
 
         print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}")
-        
-        # profiler
-        if profiler:
-            prof.stop()
-        
+
         # train on paraphrasing
         # CLL add training on other tasks
         # paraphrasing
         # see evaluation.py line 72
-        
-        # profiler
-        if profiler:
-            prof.start()
+
         
         model.train()
         train_loss = 0
         num_batches = 0
         
         # datasets.py line 145
-        for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
+        for b_ids1, b_mask1, b_ids2, b_mask2, b_labels in dataloaders.iter_train_para(epoch):
             
-            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
-                                                          batch['token_ids_2'], batch['attention_mask_2'],
-                                                          batch['labels'])
-            
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-            b_labels = b_labels.to(device)
-
             optimizer.zero_grad()
             logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
             
@@ -393,18 +307,6 @@ def train_multitask(args):
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
                 optimizer.zero_grad(set_to_none=True)
-            
-            # profiling step
-            if profiler:
-                prof.step()
-                 # stop after wait + warmup +active +repeat
-                if num_batches >= (1 + 1 + 3):
-                    break   
-                
-            # TODO for testing
-            if num_batches >= args.num_batches_para:
-                 break
-            
 
         train_loss = train_loss / num_batches
         
@@ -413,19 +315,15 @@ def train_multitask(args):
         
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
         
-        # profiler stop after one epoch
-        if profiler:
-            prof.stop()
+
+        if args.profiler:
             break
-        
+
         # evaluation
         
         (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
          _,train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
-         _,train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
-                                                    para_train_dataloader,
-                                                    sts_train_dataloader,
-                                                    model, device)
+         _,train_sts_corr, *_ )= model_eval_multitask(model, device, dataloaders, dev = False)
          
         # tensorboard   
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
@@ -445,10 +343,7 @@ def train_multitask(args):
         
         (para_loss,dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
          sst_loss,dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
-         sts_loss,dev_sts_cor, *_ )= model_eval_multitask(sst_dev_dataloader,
-                                                 para_dev_dataloader,
-                                                 sts_dev_dataloader,
-                                                 model, device)        
+         sts_loss,dev_sts_cor, *_ )= model_eval_multitask(model, device, dataloaders, dev = True)        
 
         # tensorboard
         writer.add_scalar("para/dev_loss", para_loss, epoch)

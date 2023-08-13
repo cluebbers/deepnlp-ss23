@@ -14,6 +14,7 @@ import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from tokenizer import BertTokenizer
+from tqdm import tqdm
 
 
 def preprocess_string(s):
@@ -311,7 +312,7 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
 
 
 class MultitaskDataloader:
-    def __init__(self, args):
+    def __init__(self, args, device):
         
         common_dataloader_params = dict(
             batch_size = args.batch_size,
@@ -342,6 +343,7 @@ class MultitaskDataloader:
         sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, collate_fn=sts_dev_data.collate_fn,
                                         **common_dataloader_params)   
         
+        self.args                  = args
         self.sst_train_dataloader  = sst_train_dataloader
         self.sst_dev_dataloader    = sst_dev_dataloader    
         self.para_train_dataloader = para_train_dataloader
@@ -349,3 +351,99 @@ class MultitaskDataloader:
         self.sts_train_dataloader  = sts_train_dataloader
         self.sts_dev_dataloader    = sts_dev_dataloader
         self.num_labels            = num_labels
+        self.device                = device
+        self.TQDM_DISABLE          = False
+        self.profiler              = None
+
+        if args.profiler:
+            self.profiler = torch.profiler.profile(
+                activities = [torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+                schedule = torch.profiler.schedule(wait = 1, warmup = 1, active = 3),
+                on_trace_ready = torch.profiler.tensorboard_trace_handler("runs/profiler"),
+                record_shapes = True,
+                profile_memory = True,
+                with_stack = False
+            )
+    
+    def iter_impl(self, dataloader, tqdm_desc, test_max_batch):
+
+        if self.profiler:
+            self.profiler.start()
+
+        for i, batch in enumerate(tqdm(dataloader, desc = tqdm_desc, disable = self.TQDM_DISABLE)):
+            yield batch
+
+            if self.profiler:
+                self.profiler.step()
+                if i >= (1 + 1 + 3):
+                    break
+
+            if i >= test_max_batch:
+                break
+
+        if self.profiler:
+            self.profiler.stop() 
+
+    def iter_sts(self, dataloader, tqdm_desc, evaluate):
+        for batch in self.iter_impl(dataloader, tqdm_desc, self.args.num_batches_sts):
+            output = [
+                batch['token_ids_1'].to(self.device),
+                batch['attention_mask_1'].to(self.device),
+                batch['token_ids_2'].to(self.device),
+                batch['attention_mask_2'].to(self.device),
+                batch['labels'].to(self.device)
+            ]
+            if evaluate:
+                output.append(batch['sent_ids'])
+            yield output
+
+    def iter_sst(self, dataloader, tqdm_desc, evaluate):
+        for batch in self.iter_impl(dataloader, tqdm_desc, self.args.num_batches_sst):
+            output = [
+                batch['token_ids'].to(self.device),
+                batch['attention_mask'].to(self.device),
+                batch['labels'].to(self.device)
+            ]
+            if evaluate:
+                output.append(batch['sent_ids'])
+            yield output
+
+    def iter_para(self, dataloader, tqdm_desc, evaluate):
+        for batch in self.iter_impl(dataloader, tqdm_desc, self.args.num_batches_para):
+            output = [
+                batch['token_ids_1'].to(self.device),
+                batch['attention_mask_1'].to(self.device),
+                batch['token_ids_2'].to(self.device),
+                batch['attention_mask_2'].to(self.device),
+                batch['labels'].to(self.device)
+            ]
+            if evaluate:
+                output.append(batch['sent_ids'])
+            yield output
+
+    def iter_train_sts(self, epoch):
+        yield from self.iter_sts(self.sts_train_dataloader, f'train-sts-{epoch}', False)
+
+    def iter_eval_sts(self, dev):
+        if dev:
+            yield from self.iter_sts(self.sts_dev_dataloader, f'dev-sts', True)
+        else:
+            yield from self.iter_sts(self.sts_train_dataloader, f'eval-sts', True)
+    
+    def iter_train_sst(self, epoch):
+        yield from self.iter_sst(self.sst_train_dataloader, f'train-sst-{epoch}', False)
+
+    def iter_eval_sst(self, dev):
+        if dev:
+            yield from self.iter_sst(self.sst_dev_dataloader, f'dev-sst', True)
+        else:
+            yield from self.iter_sst(self.sst_train_dataloader, f'eval-sst', True)
+
+    def iter_train_para(self, epoch):
+        yield from self.iter_para(self.para_train_dataloader, f'train-para-{epoch}', False)
+
+    def iter_eval_para(self, dev):
+        if dev:
+            yield from self.iter_para(self.para_dev_dataloader, f'dev-para', True)
+        else:
+            yield from self.iter_para(self.para_train_dataloader, f'eval-para', True)
