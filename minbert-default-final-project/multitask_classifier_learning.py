@@ -1,3 +1,5 @@
+from shared_classifier import *
+
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
 
@@ -27,15 +29,6 @@ from torch.profiler import profile, record_function, ProfilerActivity
 
 TQDM_DISABLE=False
 
-# fix the random seed
-def seed_everything(seed=11711):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
 
 
 BERT_HIDDEN_SIZE = 768
@@ -51,16 +44,8 @@ class MultitaskBERT(nn.Module):
     - Semantic Textual Similarity (predict_similarity)
     '''
     def __init__(self, config):
-        super(MultitaskBERT, self).__init__()
-        # You will want to add layers here to perform the downstream tasks.
-        # Pretrain mode does not require updating bert paramters.
-        self.bert = BertModel.from_pretrained('bert-base-uncased', local_files_only=config.local_files_only)
-        for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
-        ### TODO
+        super().__init__()
+        self.bert = load_bert_model(config)
         self.hidden_size = BERT_HIDDEN_SIZE
         self.num_labels = N_SENTIMENT_CLASSES
         

@@ -1,3 +1,5 @@
+from shared_classifier import *
+
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
 import csv
@@ -17,15 +19,6 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 TQDM_DISABLE=False
-# fix the random seed
-def seed_everything(seed=11711):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
 
 class BertSentimentClassifier(torch.nn.Module):
     '''
@@ -35,18 +28,10 @@ class BertSentimentClassifier(torch.nn.Module):
     Thus, your forward() should return one logit for each of the 5 classes.
     '''
     def __init__(self, config):
-        super(BertSentimentClassifier, self).__init__()
+        super().__init__()
+        self.bert = load_bert_model(config)
         self.num_labels = config.num_labels
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
 
-        # Pretrain mode does not require updating bert paramters.
-        for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
-
-        ### TODO
         # forward pass
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
