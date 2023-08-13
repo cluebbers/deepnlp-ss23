@@ -201,6 +201,15 @@ def train_multitask(args):
     
     # tensorboard writer
     writer = SummaryWriter(comment = args.logdir)
+    # tensorboard
+    # collect all information of run    
+    writer.add_hparams({"epochs":args.epochs,
+                        "optimizer":args.optimizer, 
+                        "lr":args.lr, 
+                        "weight_decay":args.weight_decay,
+                        "k_for_sophia":args.k_for_sophia,
+                        "hidden_dropout_prob": args.hidden_dropout_prob,
+                        "batch_size":args.batch_size})
 
     best_para_dev_acc = 0
     best_sst_dev_acc = 0
@@ -486,7 +495,6 @@ if __name__ == "__main__":
     args = get_args()
     args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path for model
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    #args.option = 'finetune'
     
     train_multitask(args)
 

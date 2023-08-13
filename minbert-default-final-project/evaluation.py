@@ -107,7 +107,7 @@ def model_eval_multitask(model, device, dataloaders, dev):
             
             #dev loss
             loss = F.mse_loss(logits, b_labels.float(), reduction='mean')
-            para_loss += loss.item()
+            sts_loss += loss.item()
             num_batches+=1
             
             y_hat = logits.flatten().cpu().numpy()
