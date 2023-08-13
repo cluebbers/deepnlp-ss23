@@ -245,7 +245,6 @@ def train_multitask(args):
             # update hession EMA
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
-                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / num_batches
         # tensorboard
@@ -260,7 +259,7 @@ def train_multitask(args):
         num_batches = 0
         for b_ids, b_mask, b_labels in dataloaders.iter_train_sst(epoch):
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             logits = model.predict_sentiment(b_ids, b_mask)
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
 
@@ -296,7 +295,7 @@ def train_multitask(args):
         # datasets.py line 145
         for b_ids1, b_mask1, b_ids2, b_mask2, b_labels in dataloaders.iter_train_para(epoch):
             
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
             
             # we need a loss function that handles logits. maybe this one?
@@ -315,7 +314,6 @@ def train_multitask(args):
             # update hession EMA
             if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
                 optimizer.update_hessian()
-                optimizer.zero_grad(set_to_none=True)
 
         train_loss = train_loss / num_batches
         
