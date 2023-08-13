@@ -102,6 +102,9 @@ def model_eval_multitask(sentiment_dataloader,
             para_y_true.extend(b_labels)
             para_sent_ids.extend(b_sent_ids)
             
+            if num_batches>3:
+                break
+            
             
 
         
@@ -148,6 +151,8 @@ def model_eval_multitask(sentiment_dataloader,
             sts_y_true.extend(b_labels)
             sts_sent_ids.extend(b_sent_ids)
             
+            if num_batches>3:
+                break
             
 
         
@@ -185,6 +190,8 @@ def model_eval_multitask(sentiment_dataloader,
             sst_y_true.extend(b_labels)
             sst_sent_ids.extend(b_sent_ids)
             
+            if num_batches>3:
+                break
             
 
         
