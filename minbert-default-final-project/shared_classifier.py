@@ -56,7 +56,7 @@ def load_bert_model(config: dict):
 		local_files_only = config.local_files_only
 	)
 	bert = BertModel.from_pretrained('bert-base-uncased', **kwargs)
-	bert_grads = True if config.option == 'finetine' else False
+	bert_grads = True if config.option == 'finetune' else False
 	for param in bert.parameters():
 		param.requires_grad = bert_grads
 	return bert
