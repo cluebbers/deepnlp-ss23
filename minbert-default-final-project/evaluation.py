@@ -102,8 +102,7 @@ def model_eval_multitask(sentiment_dataloader,
             para_y_true.extend(b_labels)
             para_sent_ids.extend(b_sent_ids)
             
-            if num_batches>3:
-                break
+
             
             
 
@@ -141,7 +140,7 @@ def model_eval_multitask(sentiment_dataloader,
             
             #dev loss
             loss = F.mse_loss(logits, b_labels.float(), reduction='mean')
-            para_loss += loss.item()
+            sts_loss += loss.item()
             num_batches+=1
             
             y_hat = logits.flatten().cpu().numpy()
@@ -151,12 +150,11 @@ def model_eval_multitask(sentiment_dataloader,
             sts_y_true.extend(b_labels)
             sts_sent_ids.extend(b_sent_ids)
             
-            if num_batches>3:
-                break
+
             
 
         
-        sts_loss = sts_loss/num_batches #normalize loss
+        sts_loss = sts_loss/num_batches #normalize sts_loss
         
         pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
         sts_corr = pearson_mat[1][0]
@@ -190,8 +188,7 @@ def model_eval_multitask(sentiment_dataloader,
             sst_y_true.extend(b_labels)
             sst_sent_ids.extend(b_sent_ids)
             
-            if num_batches>3:
-                break
+
             
 
         
