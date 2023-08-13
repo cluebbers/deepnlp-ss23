@@ -621,4 +621,5 @@ if __name__ == "__main__":
     
     train_multitask(args)
 
-    test_model(args)
+    if not args.profiler:
+        test_model(args)
