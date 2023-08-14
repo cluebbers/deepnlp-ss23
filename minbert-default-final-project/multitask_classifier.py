@@ -59,7 +59,19 @@ class MultitaskBERT(nn.Module):
         #cosine similarity classifier
         self.similarity_classifier = torch.nn.CosineSimilarity()
 
-        # raise NotImplementedError
+    @staticmethod
+    def from_config(args, device, num_labels):
+        config = SimpleNamespace(
+            hidden_dropout_prob = args.hidden_dropout_prob,
+            num_labels = num_labels,
+            hidden_size = 768,
+            data_dir = '.',
+            option = args.option,
+            local_files_only = args.local_files_only
+        )
+        model = MultitaskBERT(config)
+        model = model.to(device)
+        return model
 
 
     def forward(self, input_ids, attention_mask):
@@ -167,26 +179,13 @@ class MultitaskBERT(nn.Module):
         # raise NotImplementedError
 
 
+
 def train_multitask(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-
-    # Load all the datasets and the corresponding loaders 
     dataloaders = MultitaskDataloader(args, device)
-    num_labels            = dataloaders.num_labels
-  
-    # Init model
-    config = {'hidden_dropout_prob': args.hidden_dropout_prob,
-              'num_labels': num_labels,
-              'hidden_size': 768,
-              'data_dir': '.',
-              'option': args.option,
-              'local_files_only': args.local_files_only}
+    num_labels  = dataloaders.num_labels
+    model       = MultitaskBERT.from_config(args, device, num_labels)
 
-    config = SimpleNamespace(**config)
-
-    model = MultitaskBERT(config)
-    model = model.to(device)
-    
     # optimizer choice 
     # AdamW or SophiaG
     lr = args.lr
