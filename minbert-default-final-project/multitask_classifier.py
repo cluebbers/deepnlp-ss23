@@ -201,15 +201,6 @@ def train_multitask(args):
     
     # tensorboard writer
     writer = SummaryWriter(comment = args.logdir)
-    # tensorboard
-    # collect all information of run    
-    writer.add_hparams({"epochs":args.epochs,
-                        "optimizer":args.optimizer, 
-                        "lr":args.lr, 
-                        "weight_decay":args.weight_decay,
-                        "k_for_sophia":args.k_for_sophia,
-                        "hidden_dropout_prob": args.hidden_dropout_prob,
-                        "batch_size":args.batch_size})
 
     best_para_dev_acc = 0
     best_sst_dev_acc = 0
@@ -398,9 +389,6 @@ def train_multitask(args):
         if  args.save:
             save_model(model,optimizer,args,config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
 
-        
-        
-        
         # cool down GPU    
         if epoch %10 ==9:
             time.sleep(60*5)                     
@@ -417,12 +405,11 @@ def train_multitask(args):
                         {"para-dev-acc":best_para_dev_acc,
                         "sst-dev-acc":best_sst_dev_acc,
                         "sts-dev-cor":best_sts_dev_cor})
-        
+
     # close tensorboard writer
     writer.flush()
     writer.close()
 
-    
     
 def test_model(args):
     with torch.no_grad():
