@@ -316,7 +316,7 @@ class MultitaskDataloader:
         
         common_dataloader_params = dict(
             batch_size = args.batch_size,
-            num_workers = 4,
+            num_workers = 2,
             pin_memory = True
         )
 
