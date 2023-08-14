@@ -201,6 +201,16 @@ def train_multitask(args):
     optimizer   = load_optimizer(model, args)
     writer      = SummaryWriter(comment = args.logdir)
 
+    writer.add_hparams({
+        "epochs": args.epochs,
+        "optimizer": args.optimizer, 
+        "lr": args.lr, 
+        "weight_decay": args.weight_decay,
+        "k_for_sophia": args.k_for_sophia,
+        "hidden_dropout_prob": args.hidden_dropout_prob,
+        "batch_size":args.batch_size
+    }, {})
+
     best_para_dev_acc = 0
     best_sst_dev_acc = 0
     best_sts_dev_cor = 0
