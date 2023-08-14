@@ -25,8 +25,6 @@ from optimizer_sophia import SophiaG
 # profiling
 from torch.profiler import profile, record_function, ProfilerActivity
 
-TQDM_DISABLE=False
-
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
 
@@ -179,34 +177,35 @@ class MultitaskBERT(nn.Module):
         # raise NotImplementedError
 
 
+def load_optimizer(model, args):
+    if args.optimizer == "sophiag":
+        return SophiaG(model.parameters(), lr = args.lr, weight_decay = args.weight_decay,
+                       betas = (0.965, 0.99), rho = 0.01)
+    else:
+        return AdamW(model.parameters(), lr = args.lr, weight_decay = args.weight_decay)
+
+
+def update_optimizer(optimizer, args, num_batches):
+    if args.optimizer != "sophiag":
+        return
+    k = args.k_for_sophia
+    if num_batches % k != k - 1:
+        return
+    optimizer.update_hessian()
+
 
 def train_multitask(args):
-    device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    device      = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     dataloaders = MultitaskDataloader(args, device)
-    num_labels  = dataloaders.num_labels
-    model       = MultitaskBERT.from_config(args, device, num_labels)
-
-    # optimizer choice 
-    # AdamW or SophiaG
-    lr = args.lr
-    weight_decay = args.weight_decay
-
-    if args.optimizer == "sophiag":
-        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
-        #how often to update the hessian?
-        k = args.k_for_sophia
-    else:
-        optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    
-    # tensorboard writer
-    writer = SummaryWriter(comment = args.logdir)
+    model       = MultitaskBERT.from_config(args, device, dataloaders.num_labels)
+    optimizer   = load_optimizer(model, args)
+    writer      = SummaryWriter(comment = args.logdir)
 
     best_para_dev_acc = 0
     best_sst_dev_acc = 0
     best_sts_dev_cor = 0
     best_dev_acc = 0
-                  
-    # Run for the specified number of epochs
+
     for epoch in range(args.epochs):
         #train on semantic textual similarity (sts)
         model.train()
@@ -230,11 +229,7 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
-            
-            # SOPHIA
-            # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
+            update_optimizer(optimizer, args, num_batches)
 
         train_loss = train_loss / num_batches
         # tensorboard
@@ -258,12 +253,7 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
-            
-            # SOPHIA
-            # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
-                optimizer.zero_grad()
+            update_optimizer(optimizer, args, num_batches)
 
         train_loss = train_loss / (num_batches)
         
@@ -299,11 +289,7 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
-            
-            # SOPHIA
-            # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
+            update_optimizer(optimizer, args, num_batches)
 
         train_loss = train_loss / num_batches
         
