@@ -14,3 +14,4 @@ pip install tokenizers==0.10.1
 pip install explainaboard_client==0.0.7
 pip install tensorboard
 pip install torch-tb-profiler
+pip install optuna
