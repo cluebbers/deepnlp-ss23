@@ -1,3 +1,5 @@
+from shared_classifier import *
+
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
 import csv
@@ -17,15 +19,6 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 TQDM_DISABLE=False
-# fix the random seed
-def seed_everything(seed=11711):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
 
 class BertSentimentClassifier(torch.nn.Module):
     '''
@@ -35,18 +28,10 @@ class BertSentimentClassifier(torch.nn.Module):
     Thus, your forward() should return one logit for each of the 5 classes.
     '''
     def __init__(self, config):
-        super(BertSentimentClassifier, self).__init__()
+        super().__init__()
+        self.bert = load_bert_model(config)
         self.num_labels = config.num_labels
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
 
-        # Pretrain mode does not require updating bert paramters.
-        for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
-
-        ### TODO
         # forward pass
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
@@ -159,32 +144,6 @@ class SentimentTestDataset(Dataset):
 
         return batched_data
 
-# Load the data: a list of (sentence, label)
-def load_data(filename, flag='train'):
-    num_labels = {}
-    data = []
-    if flag == 'test':
-        with open(filename, 'r') as fp:
-            for record in csv.DictReader(fp,delimiter = '\t'):
-                sent = record['sentence'].lower().strip()
-                sent_id = record['id'].lower().strip()
-                data.append((sent,sent_id))
-    else:
-        with open(filename, 'r') as fp:
-            for record in csv.DictReader(fp,delimiter = '\t'):
-                sent = record['sentence'].lower().strip()
-                sent_id = record['id'].lower().strip()
-                label = int(record['sentiment'].strip())
-                if label not in num_labels:
-                    num_labels[label] = len(num_labels)
-                data.append((sent, label,sent_id))
-        print(f"load {len(data)} data from {filename}")
-
-    if flag == 'train':
-        return data, len(num_labels)
-    else:
-        return data
-
 # Evaluate the model for accuracy.
 def model_eval(dataloader, model, device):
     model.eval() # switch to eval model, will turn off randomness like dropout
@@ -240,27 +199,12 @@ def model_test_eval(dataloader, model, device):
     return y_pred, sents, sent_ids
 
 
-def save_model(model, optimizer, args, config, filepath):
-    save_info = {
-        'model': model.state_dict(),
-        'optim': optimizer.state_dict(),
-        'args': args,
-        'model_config': config,
-        'system_rng': random.getstate(),
-        'numpy_rng': np.random.get_state(),
-        'torch_rng': torch.random.get_rng_state(),
-    }
-
-    torch.save(save_info, filepath)
-    print(f"save the model to {filepath}")
-
-
 def train(args):    
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     # Load data
     # Create the data and its corresponding datasets and dataloader
-    train_data, num_labels = load_data(args.train, 'train')
-    dev_data = load_data(args.dev, 'valid')
+    train_data, num_labels = load_classifier_data(args.train, 'train')
+    dev_data = load_classifier_data(args.dev, 'valid')
 
     train_dataset = SentimentDataset(train_data, args)
     dev_dataset = SentimentDataset(dev_data, args)
@@ -342,11 +286,11 @@ def test(args):
         model = model.to(device)
         print(f"load model from {args.filepath}")
         
-        dev_data = load_data(args.dev, 'valid')
+        dev_data = load_classifier_data(args.dev, 'valid')
         dev_dataset = SentimentDataset(dev_data, args)
         dev_dataloader = DataLoader(dev_dataset, shuffle=False, batch_size=args.batch_size, collate_fn=dev_dataset.collate_fn)
 
-        test_data = load_data(args.test, 'test')
+        test_data = load_classifier_data(args.test, 'test')
         test_dataset = SentimentTestDataset(test_data, args)
         test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=args.batch_size, collate_fn=test_dataset.collate_fn)
         

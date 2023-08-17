@@ -1,18 +1,18 @@
+from shared_classifier import *
+from datasets import *
+
 import time, random, numpy as np, argparse, sys, re, os
 from types import SimpleNamespace
 
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+
 from torch.autograd import Variable
 
 from bert import BertModel
 from optimizer import AdamW
 from tqdm import tqdm
-
-from datasets import SentenceClassificationDataset, SentencePairDataset, \
-    load_multitask_data, load_multitask_test_data
 
 from evaluation import test_model_multitask
 
@@ -24,19 +24,6 @@ from torch.utils.tensorboard import SummaryWriter
 from optimizer_sophia import SophiaG
 # profiling
 from torch.profiler import profile, record_function, ProfilerActivity
-
-TQDM_DISABLE=False
-
-# fix the random seed
-def seed_everything(seed=11711):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-
 
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
@@ -51,16 +38,9 @@ class MultitaskBERT(nn.Module):
     - Semantic Textual Similarity (predict_similarity)
     '''
     def __init__(self, config):
-        super(MultitaskBERT, self).__init__()
-        # You will want to add layers here to perform the downstream tasks.
-        # Pretrain mode does not require updating bert paramters.
-        self.bert = BertModel.from_pretrained('bert-base-uncased', local_files_only=config.local_files_only)
-        for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
-        ### TODO
+        super().__init__()
+        self.bert = load_bert_model(config)
+
         self.hidden_size = BERT_HIDDEN_SIZE
         self.num_labels = N_SENTIMENT_CLASSES
         
@@ -77,7 +57,19 @@ class MultitaskBERT(nn.Module):
         #cosine similarity classifier
         self.similarity_classifier = torch.nn.CosineSimilarity()
 
-        # raise NotImplementedError
+    @staticmethod
+    def from_config(args, device, num_labels):
+        config = SimpleNamespace(
+            hidden_dropout_prob = args.hidden_dropout_prob,
+            num_labels = num_labels,
+            hidden_size = 768,
+            data_dir = '.',
+            option = args.option,
+            local_files_only = args.local_files_only
+        )
+        model = MultitaskBERT(config)
+        model = model.to(device)
+        return model
 
 
     def forward(self, input_ids, attention_mask):
@@ -89,6 +81,7 @@ class MultitaskBERT(nn.Module):
         ### TODO
         # the same as the first part in classifier.BertSentimentClassifier.forward
         pooled = self.bert(input_ids, attention_mask)['pooler_output']
+        pooled = self.dropout(pooled)
         
         return pooled
     
@@ -107,7 +100,7 @@ class MultitaskBERT(nn.Module):
         pooled = self.forward(input_ids, attention_mask)     
         
         # The class will then classify the sentence by applying dropout on the pooled output
-        pooled = self.dropout(pooled)
+        #pooled = self.dropout(pooled)
             
         # and then projecting it using a linear layer.
         sentiment_logit = self.sentiment_classifier(pooled)
@@ -184,127 +177,52 @@ class MultitaskBERT(nn.Module):
         # raise NotImplementedError
 
 
+def load_optimizer(model, args):
+    if args.optimizer == "sophiag":
+        return SophiaG(model.parameters(), lr = args.lr, weight_decay = args.weight_decay,
+                       betas = (0.965, 0.99), rho = 0.01)
+    else:
+        return AdamW(model.parameters(), lr = args.lr, weight_decay = args.weight_decay)
 
 
-def save_model(model, optimizer, args, config, filepath):
-    save_info = {
-        'model': model.state_dict(),
-        'optim': optimizer.state_dict(),
-        'args': args,
-        'model_config': config,
-        'system_rng': random.getstate(),
-        'numpy_rng': np.random.get_state(),
-        'torch_rng': torch.random.get_rng_state(),
-    }
-
-    torch.save(save_info, filepath)
-    print(f"save the model to {filepath}")
+def update_optimizer(optimizer, args, num_batches):
+    if args.optimizer != "sophiag":
+        return
+    k = args.k_for_sophia
+    if num_batches % k != k - 1:
+        return
+    optimizer.update_hessian()
 
 
 def train_multitask(args):
-    device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    device      = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    dataloaders = MultitaskDataloader(args, device)
+    model       = MultitaskBERT.from_config(args, device, dataloaders.num_labels)
+    optimizer   = load_optimizer(model, args)
+    writer      = SummaryWriter(comment = args.logdir)
 
-       
-    # Load data
-    # Create the data and its corresponding datasets and dataloader
-    sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
-    sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
+    writer.add_hparams({
+        "epochs": args.epochs,
+        "optimizer": args.optimizer, 
+        "lr": args.lr, 
+        "weight_decay": args.weight_decay,
+        "k_for_sophia": args.k_for_sophia,
+        "hidden_dropout_prob": args.hidden_dropout_prob,
+        "batch_size":args.batch_size
+    }, {})
 
-    sst_train_data = SentenceClassificationDataset(sst_train_data, args)
-    sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
-    
-    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
-                                      collate_fn=sst_train_data.collate_fn)
-    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=sst_dev_data.collate_fn)
-    
-    # CLL added other datasets and loaders
-    # see evaluation.py line 229
-    # paraphrasing
-    para_train_data = SentencePairDataset(para_train_data, args)
-    para_dev_data = SentencePairDataset(para_dev_data, args)
-    
-    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
-                                      collate_fn=para_train_data.collate_fn)
-    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=para_dev_data.collate_fn)
-    # similarity
-    sts_train_data = SentencePairDataset(sts_train_data, args)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args)
-    
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
-                                      collate_fn=sts_train_data.collate_fn)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=sts_dev_data.collate_fn)   
-    # CLL end
-
-    # Init model
-    config = {'hidden_dropout_prob': args.hidden_dropout_prob,
-              'num_labels': num_labels,
-              'hidden_size': 768,
-              'data_dir': '.',
-              'option': args.option,
-              'local_files_only': args.local_files_only}
-
-    config = SimpleNamespace(**config)
-
-    model = MultitaskBERT(config)
-    model = model.to(device)
-    
-    # optimizer choice 
-    # AdamW or SophiaG
-    lr = args.lr
-    weight_decay = args.weight_decay
-
-    if args.optimizer == "sophiag":
-        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
-        #how often to update the hessian?
-        k = args.k_for_sophia
-    else:
-        optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    
-    # tensorboard writer
-    writer = SummaryWriter()
-    
-    # profiler
-    profiler = args.profiler
-    if profiler:            
-        prof = torch.profiler.profile(
-                activities=[torch.profiler.ProfilerActivity.CPU,torch.profiler.ProfilerActivity.CUDA],
-                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
-                on_trace_ready=torch.profiler.tensorboard_trace_handler("runs/profiler"),
-                record_shapes=True,
-                profile_memory=True,
-                with_stack=False)
-        
     best_para_dev_acc = 0
     best_sst_dev_acc = 0
     best_sts_dev_cor = 0
     best_dev_acc = 0
-                  
-    # Run for the specified number of epochs
+
     for epoch in range(args.epochs):
         #train on semantic textual similarity (sts)
-        
-        # profiler start
-        if profiler:
-            prof.start()
-        
         model.train()
         train_loss = 0
         num_batches = 0        
          
-        for batch in tqdm(sts_train_dataloader, desc=f'train-sts-{epoch}', disable=TQDM_DISABLE):#
-            
-            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
-                                                          batch['token_ids_2'], batch['attention_mask_2'],
-                                                          batch['labels'])
-            
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-            b_labels = b_labels.to(device)
+        for b_ids1, b_mask1, b_ids2, b_mask2, b_labels in dataloaders.iter_train_sts(epoch):
 
             optimizer.zero_grad(set_to_none=True)
             similarity = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
@@ -314,59 +232,29 @@ def train_multitask(args):
             # since it punishes a prediction that is far away from the truth disproportionately
             # more than a prediction that is close to the truth
             loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
-            #loss.requires_grad = True
+            if args.option == "pretrain":
+                loss.requires_grad = True
             loss.backward()
             optimizer.step()
 
             train_loss += loss.item()
             num_batches += 1
-            
-            # SOPHIA
-            # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
-                optimizer.zero_grad(set_to_none=True)
-            
-            # profiling step
-            if profiler:
-                prof.step()
-                 # stop after wait + warmup +active *repeat
-                if num_batches >= (1+1+3):
-                    break   
-            
-            # TODO for testing
-            #if num_batches >=1:
-                #break
+            update_optimizer(optimizer, args, num_batches)
 
         train_loss = train_loss / num_batches
         # tensorboard
-        writer.add_scalar("sts/loss", train_loss, epoch)
+        writer.add_scalar("sts/train_loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
-        
-        # profiler
-        if profiler:
-            prof.stop()      
 
         # train on sentiment analysis
-        
-        # profiler
-        if profiler:
-            prof.start()
-        
+
         model.train()
         train_loss = 0
         num_batches = 0
-        for batch in tqdm(sst_train_dataloader, desc=f'train-sst-{epoch}', disable=TQDM_DISABLE):
-            
-            b_ids, b_mask, b_labels = (batch['token_ids'],
-                                       batch['attention_mask'], batch['labels'])
+        for b_ids, b_mask, b_labels in dataloaders.iter_train_sst(epoch):
 
-            b_ids = b_ids.to(device)
-            b_mask = b_mask.to(device)
-            b_labels = b_labels.to(device)
-
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             logits = model.predict_sentiment(b_ids, b_mask)
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
 
@@ -375,62 +263,29 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
-            
-            # SOPHIA
-            # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
-                optimizer.zero_grad()
-                
-            # profiling step
-            if profiler:
-                prof.step()
-                 # stop after wait + warmup +active +repeat
-                if num_batches >= (1 + 1 + 3):
-                    break   
-                
-            # TODO for testing
-            #if num_batches>=1:
-                #break
+            update_optimizer(optimizer, args, num_batches)
 
         train_loss = train_loss / (num_batches)
         
         # tensorboard
-        writer.add_scalar("sst/loss", train_loss, epoch)
+        writer.add_scalar("sst/train_loss", train_loss, epoch)
 
         print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}")
-        
-        # profiler
-        if profiler:
-            prof.stop()
-        
+
         # train on paraphrasing
         # CLL add training on other tasks
         # paraphrasing
         # see evaluation.py line 72
-        
-        # profiler
-        if profiler:
-            prof.start()
+
         
         model.train()
         train_loss = 0
         num_batches = 0
         
         # datasets.py line 145
-        for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
+        for b_ids1, b_mask1, b_ids2, b_mask2, b_labels in dataloaders.iter_train_para(epoch):
             
-            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
-                                                          batch['token_ids_2'], batch['attention_mask_2'],
-                                                          batch['labels'])
-            
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-            b_labels = b_labels.to(device)
-
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
             
             # we need a loss function that handles logits. maybe this one?
@@ -444,45 +299,24 @@ def train_multitask(args):
 
             train_loss += loss.item()
             num_batches += 1
-            
-            # SOPHIA
-            # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
-                optimizer.zero_grad(set_to_none=True)
-            
-            # profiling step
-            if profiler:
-                prof.step()
-                 # stop after wait + warmup +active +repeat
-                if num_batches >= (1 + 1 + 3):
-                    break   
-                
-            # TODO for testing
-            #if num_batches >= 1:
-                 #break
-            #break
+            update_optimizer(optimizer, args, num_batches)
 
         train_loss = train_loss / num_batches
         
         # tensorboard
-        writer.add_scalar("para/loss", train_loss, epoch)
+        writer.add_scalar("para/train_loss", train_loss, epoch)
         
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
         
-        # profiler stop after one epoch
-        if profiler:
-            prof.stop()
+
+        if args.profiler:
             break
-        
+
         # evaluation
         
-        (train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
-         train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
-         train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
-                                                    para_train_dataloader,
-                                                    sts_train_dataloader,
-                                                    model, device)
+        (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
+         _,train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
+         _,train_sts_corr, *_ )= model_eval_multitask(model, device, dataloaders, dev = False)
          
         # tensorboard   
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
@@ -500,14 +334,15 @@ def train_multitask(args):
             
         writer.add_scalar("sts/train-cor", train_sts_corr, epoch) 
         
-        (dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
-         dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
-         dev_sts_cor, *_ )= model_eval_multitask(sst_dev_dataloader,
-                                                 para_dev_dataloader,
-                                                 sts_dev_dataloader,
-                                                 model, device)        
+        (para_loss,dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
+         sst_loss,dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
+         sts_loss,dev_sts_cor, *_ )= model_eval_multitask(model, device, dataloaders, dev = True)        
 
         # tensorboard
+        writer.add_scalar("para/dev_loss", para_loss, epoch)
+        writer.add_scalar("sst/dev_loss", sst_loss, epoch)
+        writer.add_scalar("sts/dev_loss", sts_loss, epoch)
+        
         writer.add_scalar("para/dev-acc", dev_para_acc, epoch) 
         writer.add_scalar("para/dev-prec", dev_para_prec, epoch)
         writer.add_scalar("para/dev-rec", dev_para_rec, epoch)
@@ -549,9 +384,6 @@ def train_multitask(args):
         if  args.save:
             save_model(model,optimizer,args,config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
 
-        
-        
-        
         # cool down GPU    
         if epoch %10 ==9:
             time.sleep(60*5)                     
@@ -568,12 +400,11 @@ def train_multitask(args):
                         {"para-dev-acc":best_para_dev_acc,
                         "sst-dev-acc":best_sst_dev_acc,
                         "sts-dev-cor":best_sts_dev_cor})
-        
+
     # close tensorboard writer
     writer.flush()
     writer.close()
 
-    
     
 def test_model(args):
     with torch.no_grad():
@@ -604,7 +435,7 @@ def get_args():
     parser.add_argument("--sts_test", type=str, default="data/sts-test-student.csv")
 
     parser.add_argument("--seed", type=int, default=11711)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="pretrain")
@@ -621,6 +452,10 @@ def get_args():
 
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=64)
+    parser.add_argument("--num_batches_para", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
+    parser.add_argument("--num_batches_sst", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
+    parser.add_argument("--num_batches_sts", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
+    
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-3)
@@ -631,16 +466,17 @@ def get_args():
     parser.add_argument("--profiler", action="store_true")
     
     parser.add_argument("--save", type=bool, default=True)
+    parser.add_argument("--logdir", type=str, default='')
     
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path
+    args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path for model
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    #args.option = 'finetune'
-    #args.epochs = 1
+    
     train_multitask(args)
-    # TODO: uncomment for finalizing part 2
-    test_model(args)
+
+    if not args.profiler:
+        test_model(args)
