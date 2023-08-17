@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=custom-attention
-#SBATCH -t 00:05:00
+#SBATCH -t 05:00:00
 #SBATCH -p grete:shared
 #SBATCH -G A100:1
 #SBATCH --mem-per-gpu=6G
@@ -29,4 +29,4 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Execute the script.
-python -B multitask_classifier.py --use_gpu --lr=1e-5 --option=finetune --logdir="CenterMatrixLinearSelfAttentionWithSparsemax" --save=True
+python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --option=finetune --logdir="CenterMatrixLinearSelfAttentionWithSparsemax" --save=True
