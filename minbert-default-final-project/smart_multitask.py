@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
 from bert import BertModel
-from optimizer import AdamW
+from torch.optim import AdamW
 from tqdm import tqdm
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
@@ -423,7 +423,7 @@ def train_multitask(args):
                 save_model(model,optimizer,args,config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')     
 
         # cool down GPU    
-        if epoch %10 ==9:
+        if epoch % 5 == 4:
             time.sleep(60*5)                     
         
     # tensorboard
