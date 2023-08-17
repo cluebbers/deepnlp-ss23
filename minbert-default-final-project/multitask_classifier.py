@@ -39,6 +39,7 @@ class MultitaskBERT(nn.Module):
     '''
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.bert = load_bert_model(config)
 
         self.hidden_size = BERT_HIDDEN_SIZE
@@ -378,11 +379,11 @@ def train_multitask(args):
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
             #writer.add_hparams()
-            save_model(model, optimizer, args, config, args.filepath)
+            save_model(model, optimizer, args, model.config, args.filepath)
           
         # save each epoch of the trained model for detailed error analysis
         if  args.save:
-            save_model(model,optimizer,args,config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
+            save_model(model,optimizer, args, model.config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
 
         # cool down GPU    
         if epoch %10 ==9:
