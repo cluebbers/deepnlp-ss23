@@ -90,6 +90,10 @@ class BertSelfAttention(BertSelfAttentionBase):
 class BertLayer(nn.Module):
 	def __init__(self, config, attention_module: BertSelfAttentionBase = BertSelfAttention):
 		super().__init__()
+
+		from custom_attention import CenterMatrixLinearSelfAttentionWithSparsemax
+		attention_module = CenterMatrixLinearSelfAttentionWithSparsemax
+
 		# multi-head attention
 		self.self_attention = attention_module(config)
 		# add-norm
