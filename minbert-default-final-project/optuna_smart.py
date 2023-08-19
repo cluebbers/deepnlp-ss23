@@ -89,15 +89,15 @@ def train_multitask(args):
     for _ in range(args.n_trials):
         # optimizer choice 
         trial = study.ask()
-        optimizer_name = trial.suggest_categorical("Optimizer", ["AdamW", "SophiaG"])
-        lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-        weight_decay = trial.suggest_float("weight_decay", 1e-5, 1, log=True)
-        rho = trial.suggest_float("rho", 0.1, 0.5) 
-        k = trial.suggest_int("k", 5, 20, step=5)  
+        optimizer_name = "SophiaG"
+        lr = 1e-4
+        weight_decay = 1e-2
+        rho = 4e-2
         
         # AdamW or SophiaG
         if optimizer_name == "SophiaG":
             optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay)
+            k = 10
         else:
             optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         
