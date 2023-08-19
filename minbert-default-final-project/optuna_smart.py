@@ -88,26 +88,29 @@ def train_multitask(args):
     # OPTUNA
     for _ in range(args.n_trials):
         # optimizer choice 
-        trial = study.ask()
-        optimizer_name = "SophiaG"
-        lr = 1e-4
-        weight_decay = 1e-2
-        rho = 4e-2
+        trial = study.ask()     
         
-        # AdamW or SophiaG
-        if optimizer_name == "SophiaG":
-            optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay)
-            k = 10
-        else:
-            optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-        
-        # SMART    
+        # SMART   
+        epsilon = trial.suggest_float("epsilon", 1e-5, 1e-7, log=True)
+        step_size = trial.suggest_float("step_size", 1e-2, 1e-4, log=True)
+        noise_var = trial_suggest_float("noise_var", 1e-4, 1e-6, log=True)
+        norm_p = trial_suggest_categorical("norm_p", ["L1", "L2", "inf"])
         if args.smart:
             smart_loss_sst = smart.SymKlCriterion().forward
             smart_loss_qqp = smart.SymKlCriterion().forward
             smart_loss_sts = smart.MseCriterion().forward
-            smart_perturbation = SmartPerturbation(loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
-                    
+            smart_perturbation = SmartPerturbation(epsilon=epsilon,
+        step_size=step_size,
+        noise_var=noise_var,
+        norm_p=norm_p,
+        loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
+
+        lr = 1e-4
+        weight_decay = 1e-2
+        rho = 4e-2
+        k = 10
+        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay)
+
         for epoch in range(args.epochs):
             #train on semantic textual similarity (sts)
             model.train()
@@ -309,7 +312,7 @@ def get_args():
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
     parser.add_argument("--n_iter", type=int, default=100)
-    parser.add_argument("--smart", action='store_true', default=False)
+    parser.add_argument("--smart", action='store_true', default=True)
     
     args = parser.parse_args()
     return args
