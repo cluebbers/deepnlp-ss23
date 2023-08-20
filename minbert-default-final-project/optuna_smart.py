@@ -106,6 +106,7 @@ def train_multitask(args):
         norm_p=norm_p,
         loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
 
+        optimizer_name = "SophiaG"
         lr = 1e-4
         weight_decay = 1e-2
         rho = 4e-2
