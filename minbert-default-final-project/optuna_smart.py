@@ -79,7 +79,7 @@ def train_multitask(args):
             'option': args.option,
             'local_files_only': args.local_files_only}
     
-    n_iter= args.n_iter
+    n_iter= len(sst_train_dataloader)
     config = SimpleNamespace(**config)
 
     model = smart.SmartMultitaskBERT(config)
@@ -101,10 +101,10 @@ def train_multitask(args):
             smart_loss_qqp = smart.SymKlCriterion().forward
             smart_loss_sts = smart.MseCriterion().forward
             smart_perturbation = SmartPerturbation(epsilon=epsilon,
-        step_size=step_size,
-        noise_var=noise_var,
-        norm_p=norm_p,
-        loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
+                                                   step_size=step_size,
+                                                   noise_var=noise_var,
+                                                   norm_p=norm_p,
+                                                   loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
 
         optimizer_name = "SophiaG"
         lr = 1e-4
@@ -271,12 +271,12 @@ def train_multitask(args):
             train_loss = train_loss / num_batches
             
             # evaluation                
-            (para_loss, sst_loss, sts_loss)= optuna_eval(sst_dev_dataloader,
+            (paraphrase_accuracy, sts_corr, sentiment_accuracy)= optuna_eval(sst_dev_dataloader,
                                                     para_dev_dataloader,
                                                     sts_dev_dataloader,
                                                     model, device, n_iter) 
-            epoch_loss = para_loss + sst_loss + sts_loss  
-            trial.report(epoch_loss, epoch)
+            epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3 
+            trial.report(epoch_acc, epoch)
             if trial.should_prune():
                 pruned_trial = True
                 break
@@ -300,7 +300,7 @@ def get_args():
     parser.add_argument("--sts_test", type=str, default="data/sts-test-student.csv")
 
     parser.add_argument("--seed", type=int, default=11711)
-    parser.add_argument("--epochs", type=int, default=6)
+    parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="finetune")
@@ -320,7 +320,6 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
-    parser.add_argument("--n_iter", type=int, default=100)
     parser.add_argument("--smart", action='store_true', default=True)
     
     args = parser.parse_args()

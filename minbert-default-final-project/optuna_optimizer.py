@@ -17,7 +17,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data
 
 # CLL import multitask evaluation
-from smart_evaluation import optuna_eval
+from evaluation import optuna_eval
 # SOPHIA
 from optimizer_sophia import SophiaG
 # SMART regularization
@@ -26,7 +26,6 @@ import smart_utils as smart
 # Optuna
 import optuna
 from optuna.trial import TrialState
-from optuna.multi_objective.visualization import plot_pareto_front
 import matplotlib.pyplot as plt
 from optuna.visualization.matplotlib import plot_contour
 from optuna.visualization.matplotlib  import plot_edf
@@ -79,7 +78,7 @@ def train_multitask(args):
             'option': args.option,
             'local_files_only': args.local_files_only}
     
-    n_iter= args.n_iter
+    n_iter= len(sst_train_dataloader)
     config = SimpleNamespace(**config)
 
     model = smart.SmartMultitaskBERT(config)
@@ -89,17 +88,21 @@ def train_multitask(args):
     for _ in range(args.n_trials):
         # optimizer choice 
         trial = study.ask()
+        pruned_trial = False
         optimizer_name = trial.suggest_categorical("Optimizer", ["AdamW", "SophiaG"])
-        lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-        weight_decay = trial.suggest_float("weight_decay", 1e-5, 1, log=True)
-        rho = trial.suggest_float("rho", 0.1, 0.5) 
-        k = trial.suggest_int("k", 5, 20, step=5)  
+        
         
         # AdamW or SophiaG
-        if optimizer_name == "SophiaG":
-            optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay)
+        if optimizer_name == "SophiaG":            
+            lr_sophia = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+            weight_decay_sophia = trial.suggest_float("weight_decay", 1e-5, 1, log=True)
+            rho = trial.suggest_float("rho", 0.1, 0.5) 
+            k = trial.suggest_int("k", 5, 20, step=5)  
+            optimizer = SophiaG(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay_sophia)
         else:
-            optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+            lr_adam = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+            weight_decay_adam = trial.suggest_float("weight_decay", 1e-5, 1, log=True)
+            optimizer = AdamW(model.parameters(), lr=lr_adam, weight_decay=weight_decay_adam)
         
         # SMART    
         if args.smart:
@@ -266,12 +269,22 @@ def train_multitask(args):
             train_loss = train_loss / num_batches
             
             # evaluation                
-            (para_loss, sst_loss, sts_loss)= optuna_eval(sst_dev_dataloader,
+            (paraphrase_accuracy, sts_corr, sentiment_accuracy)= optuna_eval(sst_dev_dataloader,
                                                     para_dev_dataloader,
                                                     sts_dev_dataloader,
                                                     model, device, n_iter) 
-        epoch_loss = para_loss + sst_loss + sts_loss    
-        study.tell(trial, epoch_loss, state=TrialState.COMPLETE)       
+            if np.isnan(sts_corr):
+                sts_corr = 0
+            epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3 
+            trial.report(epoch_acc, epoch)
+            if trial.should_prune():
+                pruned_trial = True
+                break
+            
+        if pruned_trial:
+            study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+        else:       
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)       
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -288,7 +301,7 @@ def get_args():
     parser.add_argument("--sts_test", type=str, default="data/sts-test-student.csv")
 
     parser.add_argument("--seed", type=int, default=11711)
-    parser.add_argument("--epochs", type=int, default=6)
+    parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="finetune")
@@ -308,7 +321,6 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
-    parser.add_argument("--n_iter", type=int, default=100)
     parser.add_argument("--smart", action='store_true', default=False)
     
     args = parser.parse_args()
@@ -317,7 +329,9 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    study = optuna.create_study(direction="minimize", study_name="Optimizer")
+    study = optuna.create_study(direction="minimize", study_name="Optimizer",
+                                pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
+                                                                        max_resource=3))
     train_multitask(args)
     
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
@@ -334,23 +348,23 @@ if __name__ == "__main__":
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
     fig = plot_optimization_history(study)
-    plt.savefig("optuna/history.png")
+    plt.savefig("optuna/optimizer-history.png")
     fig = plot_intermediate_values(study)
-    plt.savefig("optuna/intermediate.png")
+    plt.savefig("optuna/optimizer-intermediate.png")
     fig = plot_parallel_coordinate(study)
-    plt.savefig("optuna/parallel.png")
+    plt.savefig("optuna/optimizer-parallel.png")
     fig = plot_contour(study)
-    plt.savefig("optuna/contour.png")
+    plt.savefig("optuna/optimizer-contour.png")
     fig = plot_slice(study)
-    plt.savefig("optuna/slice.png")
+    plt.savefig("optuna/optimizer-slice.png")
     fig = plot_param_importances(study)
-    plt.savefig("optuna/parameter.png")
+    plt.savefig("optuna/optimizer-parameter.png")
     fig = plot_edf(study)
-    plt.savefig("optuna/edf.png")
+    plt.savefig("optuna/optimizer-edf.png")
     fig = plot_rank(study)
-    plt.savefig("optuna/rank.png")
+    plt.savefig("optuna/optimizer-rank.png")
     fig = plot_timeline(study)
-    plt.savefig("optuna/timeline.png")
+    plt.savefig("optuna/optimizer-timeline.png")
                 
     print("  Params: ")
     for key, value in trial.params.items():
