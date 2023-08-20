@@ -27,7 +27,7 @@ from datasets import load_multitask_data, load_multitask_test_data, \
     SentencePairDataset, SentencePairTestDataset
 
 
-TQDM_DISABLE = True
+TQDM_DISABLE = False
 
 # Perform model evaluation in terms by averaging accuracies across tasks.
 def model_eval_multitask(sentiment_dataloader,
@@ -318,21 +318,19 @@ def optuna_eval(sentiment_dataloader,
                          sts_dataloader,
                          model, device, n_iter):
     model.eval()  # switch to eval model, will turn off randomness like dropout
-
+    
     with torch.no_grad():
-        para_y_true = []
-        para_y_pred = []
-        para_sent_ids = []
-        para_loss = 0
-        num_batches = 0
-
         # Evaluate paraphrase detection. qqp
+        para_y_true = []
+        para_y_pred = []        
+        num_batches = 0
+        
         for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval-para', disable=TQDM_DISABLE)):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
-             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
-                          batch['token_ids_2'], batch['attention_mask_2'],
-                          batch['labels'], batch['sent_ids'])
+             b_labels) = (batch['token_ids_1'], batch['attention_mask_1'],
+                                      batch['token_ids_2'], batch['attention_mask_2'],
+                                      batch['labels'])
 
             b_ids1 = b_ids1.to(device)
             b_mask1 = b_mask1.to(device)
@@ -340,39 +338,29 @@ def optuna_eval(sentiment_dataloader,
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
 
-            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=1)
-            
-            #dev_loss             
-            loss = F.binary_cross_entropy_with_logits(logits, b_labels.float(), reduction='mean')
-            para_loss += loss.item()
-            num_batches+=1            
-            
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=1)   
             y_hat = logits.sigmoid().round().flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
             para_y_pred.extend(y_hat)
             para_y_true.extend(b_labels)
-            para_sent_ids.extend(b_sent_ids)
             
-            # TODO
+            num_batches +=1
             if num_batches >= n_iter:
                 break  
 
-        para_loss = para_loss/num_batches #normalize loss
-
+        paraphrase_accuracy = accuracy_score(para_y_true, para_y_pred)
+        
+        # Evaluate semantic textual similarity. (sts)
         sts_y_true = []
         sts_y_pred = []
-        sts_sent_ids = []
-        sts_loss = 0
-        num_batches = 0
-
-        # Evaluate semantic textual similarity. (sts)
+        
         for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval-sts', disable=TQDM_DISABLE)):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
-             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+             b_labels) = (batch['token_ids_1'], batch['attention_mask_1'],
                           batch['token_ids_2'], batch['attention_mask_2'],
-                          batch['labels'], batch['sent_ids'])
+                          batch['labels'])
 
             b_ids1 = b_ids1.to(device)
             b_mask1 = b_mask1.to(device)
@@ -381,57 +369,35 @@ def optuna_eval(sentiment_dataloader,
             b_labels = b_labels.to(device)
 
             logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
-            
-            #dev loss
-            loss = F.mse_loss(logits, b_labels.float(), reduction='mean')
-            sts_loss += loss.item()
-            num_batches+=1
-            
+
             y_hat = logits.flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
             sts_y_pred.extend(y_hat)
             sts_y_true.extend(b_labels)
-            sts_sent_ids.extend(b_sent_ids)
             
-            # TODO
-            if num_batches >= n_iter:
-                break  
+        pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
+        sts_corr = pearson_mat[1][0]
             
-        sts_loss = sts_loss/num_batches #normalize sts_loss
-
+        # Evaluate sentiment classification. (sst)
         sst_y_true = []
         sst_y_pred = []
-        sst_sent_ids = []
-        sst_loss = 0
-        num_batches = 0
-
-        # Evaluate sentiment classification. (sst)
+        
         for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval-sst', disable=TQDM_DISABLE)):
-            b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
+            b_ids, b_mask, b_labels = batch['token_ids'], batch['attention_mask'], batch['labels']
 
             b_ids = b_ids.to(device)
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
 
             logits = logits = model(b_ids, b_mask, task_id=0)
-            
-            #Dev loss
-            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
-            sst_loss += loss.item()
-            num_batches+=1
-            
+ 
             y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
             sst_y_pred.extend(y_hat)
-            sst_y_true.extend(b_labels)
-            sst_sent_ids.extend(b_sent_ids)  
+            sst_y_true.extend(b_labels)  
             
-            # TODO
-            if num_batches >= n_iter:
-                break        
+        sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
 
-        sst_loss = sst_loss/num_batches #normalize loss
-
-        return (para_loss, sst_loss,sts_loss)
+        return (paraphrase_accuracy, sts_corr, sentiment_accuracy)
