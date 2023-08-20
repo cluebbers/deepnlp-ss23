@@ -91,9 +91,9 @@ def train_multitask(args):
         trial = study.ask()     
         
         # SMART   
-        epsilon = trial.suggest_float("epsilon", 1e-5, 1e-7, log=True)
-        step_size = trial.suggest_float("step_size", 1e-2, 1e-4, log=True)
-        noise_var = trial_suggest_float("noise_var", 1e-4, 1e-6, log=True)
+        epsilon = trial.suggest_float("epsilon", 1e-7, 1e-5, log=True)
+        step_size = trial.suggest_float("step_size", 1e-4, 1e-2, log=True)
+        noise_var = trial_suggest_float("noise_var", 1e-6, 1e-4, log=True)
         norm_p = trial_suggest_categorical("norm_p", ["L1", "L2", "inf"])
         if args.smart:
             smart_loss_sst = smart.SymKlCriterion().forward
