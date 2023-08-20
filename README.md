@@ -122,7 +122,7 @@ Our model achieves the following performance on :
 ## Member Contributions
 Dawor, Moataz:
 
-Lübbers, Christopher L.: Part 1: Sentiment analysis with BERT; Part 2: multitask_classifier.MultitaskBERT, multitask_classifier.train_multitask, Tensorboard (metrics  + profiler), optimizer_sophia.py, Baseline
+Lübbers, Christopher L.: Part 1: Sentiment analysis with BERT; Part 2: multitask_classifier.MultitaskBERT, multitask_classifier.train_multitask, Tensorboard (metrics  + profiler), SOPHIAG implementation, Baseline, SMART implementation, Optuna Optimizer
 
 Niegsch, Luaks*:
 
