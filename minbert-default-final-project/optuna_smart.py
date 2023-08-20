@@ -89,7 +89,8 @@ def train_multitask(args):
     for _ in range(args.n_trials):
         # optimizer choice 
         trial = study.ask()     
-        
+        pruned_trial = False
+
         # SMART   
         epsilon = trial.suggest_float("epsilon", 1e-7, 1e-5, log=True)
         step_size = trial.suggest_float("step_size", 1e-4, 1e-2, log=True)
@@ -273,8 +274,15 @@ def train_multitask(args):
                                                     para_dev_dataloader,
                                                     sts_dev_dataloader,
                                                     model, device, n_iter) 
-        epoch_loss = para_loss + sst_loss + sts_loss    
-        study.tell(trial, epoch_loss, state=TrialState.COMPLETE)       
+            epoch_loss = para_loss + sst_loss + sts_loss  
+            trial.report(epoch_loss, epoch)
+            if trial.should_prune():
+                pruned_trial = True
+                break
+        if pruned_trial:
+            study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+        else:       
+            study.tell(trial, epoch_loss, state=TrialState.COMPLETE)       
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -320,7 +328,10 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    study = optuna.create_study(direction="minimize", study_name="Optimizer")
+    study = optuna.create_study(direction="minimize", 
+                                study_name="Optimizer",
+                                pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
+                                                                        max_resource=3))
     train_multitask(args)
     
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
