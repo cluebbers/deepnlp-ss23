@@ -114,7 +114,6 @@ def train_multitask(args):
         for epoch in range(args.epochs):
             #train on semantic textual similarity (sts)
             model.train()
-            train_loss = 0
             num_batches = 0        
             
             for batch in tqdm(sts_train_dataloader, desc=f'train-sts-{epoch}', disable=TQDM_DISABLE):#
@@ -132,27 +131,10 @@ def train_multitask(args):
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
                 
-                # SMART
-                if args.smart:
-                    adv_loss = smart_perturbation.forward(
-                        model=model,
-                        logits=logits,
-                        input_ids_1=b_ids1,                
-                        attention_mask_1=b_mask1,
-                        input_ids_2=b_ids2,
-                        attention_mask_2=b_mask2,
-                        task_id=2,
-                        task_type=smart.TaskType.Regression) 
-                else:
-                    adv_loss = 0
-                
-                original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
-                loss = original_loss + adv_loss
-
+                loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
                 loss.backward()
                 optimizer.step()
 
-                train_loss += loss.item()
                 num_batches += 1
                 
                 # SOPHIA
@@ -164,11 +146,8 @@ def train_multitask(args):
                 if num_batches >= n_iter:
                     break
 
-            train_loss = train_loss / num_batches
-
             # train on sentiment analysis sst        
             model.train()
-            train_loss = 0
             num_batches = 0
             for batch in tqdm(sst_train_dataloader, desc=f'train-sst-{epoch}', disable=TQDM_DISABLE):
                 
@@ -180,27 +159,12 @@ def train_multitask(args):
                 b_labels = b_labels.to(device)
 
                 optimizer.zero_grad()
-                logits = model(b_ids, b_mask, task_id=0)
+                logits = model(b_ids, b_mask, task_id=0)     
                 
-                # SMART
-                if args.smart:
-                    adv_loss = smart_perturbation.forward(
-                        model=model,
-                        logits=logits,
-                        input_ids_1=b_ids,                
-                        attention_mask_1=b_mask,
-                        task_id=0,
-                        task_type=smart.TaskType.Classification) 
-                else:
-                    adv_loss = 0            
-                
-                original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
-                loss = original_loss + adv_loss
-
+                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum')
                 loss.backward()
                 optimizer.step()
 
-                train_loss += loss.item()
                 num_batches += 1
                 
                 # SOPHIA
@@ -211,12 +175,9 @@ def train_multitask(args):
                     
                 if num_batches >= n_iter:
                     break
-
-            train_loss = train_loss / (num_batches)
             
             # train on paraphrasing Quora Question Pairs qqp       
             model.train()
-            train_loss = 0
             num_batches = 0
 
             for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
@@ -233,28 +194,11 @@ def train_multitask(args):
 
                 optimizer.zero_grad()
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
-                
-                # SMART
-                if args.smart:
-                    adv_loss = smart_perturbation.forward(
-                        model=model,
-                        logits=logits,
-                        input_ids_1=b_ids1,                
-                        attention_mask_1=b_mask1,
-                        input_ids_2=b_ids2,
-                        attention_mask_2=b_mask2,
-                        task_id=1,
-                        task_type=smart.TaskType.Classification) 
-                else:
-                    adv_loss = 0
                     
-                original_loss = F.cross_entropy(logits, b_labels.view(-1).float(), reduction='mean')
-                loss = original_loss + adv_loss
-
+                loss = F.cross_entropy(logits, b_labels.view(-1).float(), reduction='mean')
                 loss.backward()
                 optimizer.step()
 
-                train_loss += loss.item()
                 num_batches += 1
                 
                 # SOPHIA
@@ -265,8 +209,6 @@ def train_multitask(args):
                     
                 if num_batches >= n_iter:
                     break     
-
-            train_loss = train_loss / num_batches
             
             # evaluation                
             (paraphrase_accuracy, sts_corr, sentiment_accuracy)= optuna_eval(sst_dev_dataloader,
@@ -321,7 +263,6 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
-    parser.add_argument("--smart", action='store_true', default=False)
     
     args = parser.parse_args()
     return args
