@@ -21,7 +21,6 @@ from evaluation import optuna_eval
 # SOPHIA
 from optimizer_sophia import SophiaG
 # SMART regularization
-from smart_perturbation import SmartPerturbation
 import smart_utils as smart
 # Optuna
 import optuna
@@ -103,14 +102,7 @@ def train_multitask(args):
             lr_adam = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
             weight_decay_adam = trial.suggest_float("weight_decay", 1e-5, 1, log=True)
             optimizer = AdamW(model.parameters(), lr=lr_adam, weight_decay=weight_decay_adam)
-        
-        # SMART    
-        if args.smart:
-            smart_loss_sst = smart.SymKlCriterion().forward
-            smart_loss_qqp = smart.SymKlCriterion().forward
-            smart_loss_sts = smart.MseCriterion().forward
-            smart_perturbation = SmartPerturbation(loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
-                    
+             
         for epoch in range(args.epochs):
             #train on semantic textual similarity (sts)
             model.train()
