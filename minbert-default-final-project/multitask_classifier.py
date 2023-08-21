@@ -319,7 +319,7 @@ def train_multitask(args):
         
         (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
          _,train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
-         _,train_sts_corr, *_ )= model_eval_multitask(model, device, dataloaders, dev = False)
+         _,train_sts_corr, *_ ) = model_eval_multitask(model, device, dataloaders, dev = False)
          
         # tensorboard   
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
