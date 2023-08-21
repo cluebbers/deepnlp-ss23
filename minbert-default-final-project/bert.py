@@ -88,14 +88,11 @@ class BertSelfAttention(BertSelfAttentionBase):
 
 
 class BertLayer(nn.Module):
-	def __init__(self, config, attention_module: BertSelfAttentionBase = BertSelfAttention):
+	def __init__(self, config):
 		super().__init__()
-
-		from custom_attention import CenterMatrixLinearSelfAttentionWithSparsemax
-		attention_module = CenterMatrixLinearSelfAttentionWithSparsemax
-
 		# multi-head attention
-		self.self_attention = attention_module(config)
+		assert(issubclass(config.attention_module, BertSelfAttentionBase))
+		self.self_attention = config.attention_module(config)
 		# add-norm
 		self.attention_dense = nn.Linear(config.hidden_size, config.hidden_size)
 		self.attention_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -175,7 +172,7 @@ class BertModel(BertPreTrainedModel):
 	2. a stack of n bert layers (used in self.encode)
 	3. a linear transformation layer for [CLS] token (used in self.forward, as given)
 	"""
-	def __init__(self, config, attention_module = BertSelfAttention):
+	def __init__(self, config):
 		super().__init__(config)
 		self.config = config
 
@@ -190,7 +187,7 @@ class BertModel(BertPreTrainedModel):
 		self.register_buffer('position_ids', position_ids)
 
 		# bert encoder
-		self.bert_layers = nn.ModuleList([BertLayer(config, attention_module) for _ in range(config.num_hidden_layers)])
+		self.bert_layers = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
 
 		# for [CLS] token
 		self.pooler_dense = nn.Linear(config.hidden_size, config.hidden_size)

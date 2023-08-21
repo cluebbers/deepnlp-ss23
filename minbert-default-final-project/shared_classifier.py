@@ -53,7 +53,8 @@ def load_classifier_data(filename, flag='train'):
 
 def load_bert_model(config: dict):
 	kwargs = dict(
-		local_files_only = config.local_files_only
+		local_files_only = config.local_files_only,
+		attention_module = config.attention_module
 	)
 	bert = BertModel.from_pretrained('bert-base-uncased', **kwargs)
 	bert_grads = True if config.option == 'finetune' else False
