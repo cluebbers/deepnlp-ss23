@@ -480,7 +480,7 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'Models/{args.option}-{args.lr}-multitask.pt' # save path for model
+    args.filepath = f'Models/{args.custom_attention}-{args.option}-{args.lr}-multitask.pt' # save path for model
     seed_everything(args.seed)  # fix the seed for reproducibility    
     
     train_multitask(args)

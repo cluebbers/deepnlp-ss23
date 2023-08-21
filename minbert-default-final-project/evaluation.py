@@ -21,10 +21,7 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report, f1_score, recall_score, accuracy_score, precision_score
 from tqdm import tqdm
 import numpy as np
-
-from datasets import load_multitask_data, load_multitask_test_data, \
-    SentenceClassificationDataset, SentenceClassificationTestDataset, \
-    SentencePairDataset, SentencePairTestDataset
+from datasets import *
 
 
 TQDM_DISABLE = False
@@ -244,8 +241,6 @@ def test_model_multitask(args, model, device):
     device      = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     dataloaders = MultitaskDataloader(args, device)
     model       = MultitaskBERT.from_config(args, device, dataloaders.num_labels)
-    optimizer   = load_optimizer(model, args)
-    writer      = SummaryWriter(comment = args.logdir)
 
     _,dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids,_,_,_, \
         _,dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids,_,_,_,_,dev_sts_corr, \
