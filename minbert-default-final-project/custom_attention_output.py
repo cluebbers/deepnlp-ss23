@@ -44,7 +44,9 @@ def clean_output(file_path: str):
         print(f'Epoch #{i}')
         print(f'train_score: {train_score}')
         print(f'dev_score:   {dev_score}')
-        print('=' * 52)
+        print('-' * 52)
 
 for file_path in glob.glob('slurm_files/*.out'):
-    clean_output('output.out')
+    print(file_path)
+    print('=' * 52)
+    clean_output(file_path)
