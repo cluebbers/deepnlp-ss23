@@ -44,8 +44,8 @@ class BertSelfAttentionBase(ABC, torch.nn.Module):
 		output: [bs, seq_len, hidden_size]
 		'''
 		key = self.transform(hidden_states, self.key)
-		query = self.transform(hidden_states, self.value)
-		value = self.transform(hidden_states, self.query)
+		query = self.transform(hidden_states, self.query)
+		value = self.transform(hidden_states, self.value)
 		attention_value = self.attention(key, query, value, attention_mask)
 		return attention_value
 
