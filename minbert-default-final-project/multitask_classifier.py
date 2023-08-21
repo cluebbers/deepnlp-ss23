@@ -211,7 +211,8 @@ def train_multitask(args):
         "weight_decay": args.weight_decay,
         "k_for_sophia": args.k_for_sophia,
         "hidden_dropout_prob": args.hidden_dropout_prob,
-        "batch_size":args.batch_size
+        "batch_size":args.batch_size,
+        "custom_attention":args.custom_attention
     }, {})
 
     best_para_dev_acc = 0
@@ -399,7 +400,8 @@ def train_multitask(args):
                         "weight_decay":args.weight_decay,
                         "k_for_sophia":args.k_for_sophia,
                         "hidden_dropout_prob": args.hidden_dropout_prob,
-                        "batch_size":args.batch_size},
+                        "batch_size":args.batch_size,
+                        "custom_attention":args.custom_attention},
                         {"para-dev-acc":best_para_dev_acc,
                         "sst-dev-acc":best_sst_dev_acc,
                         "sts-dev-cor":best_sts_dev_cor})
