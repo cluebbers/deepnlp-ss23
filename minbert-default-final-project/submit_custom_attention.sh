@@ -29,4 +29,5 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Execute the script.
-python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --option=finetune --logdir="CenterMatrixLinearSelfAttentionWithSparsemax" --save=False
+CUSTOM_ATTENTION="BertSelfAttention"
+python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --option=finetune --logdir=$CUSTOM_ATTENTION --save=False --custom_attention=$CUSTOM_ATTENTION
