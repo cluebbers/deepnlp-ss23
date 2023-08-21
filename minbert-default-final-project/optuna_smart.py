@@ -17,7 +17,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data
 
 # CLL import multitask evaluation
-from smart_evaluation import optuna_eval
+from evaluation import optuna_eval
 # SOPHIA
 from optimizer_sophia import SophiaG
 # SMART regularization
@@ -26,7 +26,6 @@ import smart_utils as smart
 # Optuna
 import optuna
 from optuna.trial import TrialState
-from optuna.multi_objective.visualization import plot_pareto_front
 import matplotlib.pyplot as plt
 from optuna.visualization.matplotlib import plot_contour
 from optuna.visualization.matplotlib  import plot_edf
@@ -109,7 +108,7 @@ def train_multitask(args):
         optimizer_name = "SophiaG"
         lr = 1e-4
         weight_decay = 1e-2
-        rho = 4e-2
+        rho = 3e-1
         k = 10
         optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay)
 
@@ -275,6 +274,8 @@ def train_multitask(args):
                                                     para_dev_dataloader,
                                                     sts_dev_dataloader,
                                                     model, device, n_iter) 
+            if np.isnan(sts_corr):
+                sts_corr = 0
             epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3 
             trial.report(epoch_acc, epoch)
             if trial.should_prune():
@@ -283,7 +284,7 @@ def train_multitask(args):
         if pruned_trial:
             study.tell(trial, state=optuna.trial.TrialState.PRUNED)
         else:       
-            study.tell(trial, epoch_loss, state=TrialState.COMPLETE)       
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)       
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -328,22 +329,23 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    study = optuna.create_study(direction="minimize", 
-                                study_name="Optimizer",
+    study = optuna.create_study(direction="maximize", 
+                                study_name="SMART",
                                 pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
                                                                         max_resource=3))
     train_multitask(args)
     
-    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+    number_trials = len(study.trials)    
+    ntrial_string = f"Number of finished trials: {number_trials}"
+    pruned_trials = len(study.get_trials(deepcopy=False, states=[TrialState.PRUNED]))
+    pruned_string = f"Number of pruned trials: {pruned_trials}"
+    complete_trials = len(study.get_trials(deepcopy=False, states=[TrialState.COMPLETE]))
+    complete_string = f"Number of complete trials: {complete_trials}"
+    param_string = "Best value: {} (params: {})\n".format(study.best_value, study.best_params)
+    lines = [ntrial_string, pruned_string, complete_string, param_string]
     
-    print("Study statistics: ")
-    print("  Number of finished trials: ", len(study.trials))
-    print("  Number of pruned trials: ", len(pruned_trials))
-    print("  Number of complete trials: ", len(complete_trials))
-
-    print("Best trial:")
-    trial = study.best_trial
+    with open('optuna/smart.txt', 'w') as f:
+        f.write('\n'.join(lines))       
     
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
@@ -365,8 +367,3 @@ if __name__ == "__main__":
     plt.savefig("optuna/smart-rank.png")
     fig = plot_timeline(study)
     plt.savefig("optuna/smart-timeline.png")
-                
-    print("  Params: ")
-    for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
-

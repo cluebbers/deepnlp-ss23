@@ -93,14 +93,14 @@ def train_multitask(args):
         
         # AdamW or SophiaG
         if optimizer_name == "SophiaG":            
-            lr_sophia = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-            weight_decay_sophia = trial.suggest_float("weight_decay", 1e-5, 1, log=True)
+            lr_sophia = trial.suggest_float("lr-sophia", 1e-5, 1e-3, log=True)
+            weight_decay_sophia = trial.suggest_float("wd_sophia", 1e-5, 1, log=True)
             rho = trial.suggest_float("rho", 0.1, 0.5) 
             k = trial.suggest_int("k", 5, 20, step=5)  
             optimizer = SophiaG(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay_sophia)
         else:
-            lr_adam = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-            weight_decay_adam = trial.suggest_float("weight_decay", 1e-5, 1, log=True)
+            lr_adam = trial.suggest_float("lr-adam", 1e-5, 1e-3, log=True)
+            weight_decay_adam = trial.suggest_float("wd-adam", 1e-5, 1, log=True)
             optimizer = AdamW(model.parameters(), lr=lr_adam, weight_decay=weight_decay_adam)
              
         for epoch in range(args.epochs):
@@ -262,21 +262,22 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    study = optuna.create_study(direction="minimize", study_name="Optimizer",
+    study = optuna.create_study(direction="maximize", study_name="Optimizer",
                                 pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
                                                                         max_resource=3))
     train_multitask(args)
     
-    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+    number_trials = len(study.trials)    
+    ntrial_string = f"Number of finished trials: {number_trials}"
+    pruned_trials = len(study.get_trials(deepcopy=False, states=[TrialState.PRUNED]))
+    pruned_string = f"Number of pruned trials: {pruned_trials}"
+    complete_trials = len(study.get_trials(deepcopy=False, states=[TrialState.COMPLETE]))
+    complete_string = f"Number of complete trials: {complete_trials}"
+    param_string = "Best value: {} (params: {})\n".format(study.best_value, study.best_params)
+    lines = [ntrial_string, pruned_string, complete_string, param_string]
     
-    print("Study statistics: ")
-    print("  Number of finished trials: ", len(study.trials))
-    print("  Number of pruned trials: ", len(pruned_trials))
-    print("  Number of complete trials: ", len(complete_trials))
-
-    print("Best trial:")
-    trial = study.best_trial
+    with open('optuna/optimizer.txt', 'w') as f:
+        f.write('\n'.join(lines))       
     
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
@@ -298,8 +299,3 @@ if __name__ == "__main__":
     plt.savefig("optuna/optimizer-rank.png")
     fig = plot_timeline(study)
     plt.savefig("optuna/optimizer-timeline.png")
-                
-    print("  Params: ")
-    for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
-
