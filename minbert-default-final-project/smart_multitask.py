@@ -16,10 +16,10 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
-from smart_evaluation import test_model_multitask
+from evaluation import test_model_multitask
 
 # CLL import multitask evaluation
-from smart_evaluation import model_eval_multitask
+from evaluation import model_eval_multitask
 # tensorboard
 from torch.utils.tensorboard import SummaryWriter
 # SOPHIA
