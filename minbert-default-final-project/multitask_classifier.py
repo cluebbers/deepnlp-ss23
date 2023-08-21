@@ -386,7 +386,8 @@ def train_multitask(args):
           
         # save each epoch of the trained model for detailed error analysis
         if  args.save:
-            save_model(model,optimizer, args, model.config,"Models/epoch"+str(epoch)+"-"+f'{args.option}-{args.lr}-multitask.pt')
+            save_path = f'Models/epoch-{epoch}-{args.option}-{args.custom_attention}-{args.lr}-multitask.pt'
+            save_model(model, optimizer, args, model.config, save_path)
 
         # cool down GPU    
         if epoch %10 ==9:
@@ -480,7 +481,7 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'Models/{args.custom_attention}-{args.option}-{args.lr}-multitask.pt' # save path for model
+    args.filepath = f'Models/{args.option}-{args.custom_attention}-{args.lr}-multitask.pt' # save path for model
     seed_everything(args.seed)  # fix the seed for reproducibility    
     
     train_multitask(args)
