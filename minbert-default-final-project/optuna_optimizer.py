@@ -276,11 +276,12 @@ if __name__ == "__main__":
     param_string = "Best value: {} (params: {})\n".format(study.best_value, study.best_params)
     lines = [ntrial_string, pruned_string, complete_string, param_string]
     
-    with open('optuna/optimizer.txt', 'w') as f:
-        f.write('\n'.join(lines))       
-    
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
+        
+    with open('optuna/optimizer.txt', 'w') as f:
+        f.write('\n'.join(lines))          
+    
     fig = plot_optimization_history(study)
     plt.savefig("optuna/optimizer-history.png")
     fig = plot_intermediate_values(study)
