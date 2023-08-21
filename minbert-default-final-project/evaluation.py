@@ -238,9 +238,7 @@ def model_eval_test_multitask(sentiment_dataloader,
 
 
 def test_model_multitask(args, model, device):
-    device      = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     dataloaders = MultitaskDataloader(args, device)
-    model       = MultitaskBERT.from_config(args, device, dataloaders.num_labels)
 
     _,dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids,_,_,_, \
         _,dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids,_,_,_,_,dev_sts_corr, \
