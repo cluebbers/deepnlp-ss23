@@ -98,3 +98,18 @@ class CenterMatrixLinearSelfAttention(LinearSelfAttention, CenterMatrixSelfAtten
 
 class CenterMatrixLinearSelfAttentionWithSparsemax(CenterMatrixLinearSelfAttention, SparsemaxSelfAttention):
 	pass
+
+
+################################################################################
+# All custom attention choices as strings for the parameters.
+################################################################################
+CUSTOM_ATTENTION_CHOICES = [
+	"BertSelfAttention",
+	"LinearSelfAttention",
+	"SparsemaxSelfAttention",
+	"CenterMatrixSelfAttention",
+	"LinearSelfAttentionWithSparsemax",
+	"CenterMatrixSelfAttentionWithSparsemax",
+	"CenterMatrixLinearSelfAttention",
+	"CenterMatrixLinearSelfAttentionWithSparsemax"
+]

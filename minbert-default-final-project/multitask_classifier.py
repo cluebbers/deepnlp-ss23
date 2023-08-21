@@ -24,6 +24,7 @@ from torch.utils.tensorboard import SummaryWriter
 from optimizer_sophia import SophiaG
 # profiling
 from torch.profiler import profile, record_function, ProfilerActivity
+from custom_attention import *
 
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
@@ -66,7 +67,8 @@ class MultitaskBERT(nn.Module):
             hidden_size = 768,
             data_dir = '.',
             option = args.option,
-            local_files_only = args.local_files_only
+            local_files_only = args.local_files_only,
+            attention_module = eval(args.custom_attention)
         )
         model = MultitaskBERT(config)
         model = model.to(device)
@@ -465,6 +467,8 @@ def get_args():
     parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
     parser.add_argument("--profiler", action="store_true")
+    parser.add_argument("--custom_attention", type=str, choices = CUSTOM_ATTENTION_CHOICES,
+                        help="Which custom attention should be used?", default = "BertSelfAttention")
     
     parser.add_argument("--save", type=bool, default=True)
     parser.add_argument("--logdir", type=str, default='')
