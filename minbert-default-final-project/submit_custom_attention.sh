@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=BertSelfAttention
-#SBATCH -t 00:10:00
+#SBATCH -t 03:00:00
 #SBATCH -p grete:shared
 #SBATCH -G A100:1
 #SBATCH --mem-per-gpu=6G
