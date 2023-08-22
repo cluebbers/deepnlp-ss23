@@ -312,7 +312,7 @@ def load_multitask_data(sentiment_filename,paraphrase_filename,similarity_filena
 
 
 class MultitaskDataloader:
-    def __init__(self, args, device):
+    def __init__(self, args, device, enable_test: bool = False):
         
         common_dataloader_params = dict(
             batch_size = args.batch_size,
@@ -364,6 +364,26 @@ class MultitaskDataloader:
                 profile_memory = True,
                 with_stack = False
             )
+        
+        if enable_test:
+            sst_test_data, num_labels, para_test_data, sts_test_data = load_multitask_data(args.sst_test,args.para_test, args.sts_test, split='test')
+            
+            sst_test_data = SentenceClassificationTestDataset(sst_test_data, args)
+            sst_test_dataloader = DataLoader(sst_test_data, shuffle=True, collate_fn=sst_test_data.collate_fn,
+                                             **common_dataloader_params)
+            
+            para_test_data = SentencePairTestDataset(para_test_data, args)
+            para_test_dataloader = DataLoader(para_test_data, shuffle=True, collate_fn=para_test_data.collate_fn,
+                                              **common_dataloader_params)
+            
+            sts_test_data = SentencePairTestDataset(sts_test_data, args)
+            sts_test_dataloader = DataLoader(sts_test_data, shuffle=True, collate_fn=sts_test_data.collate_fn,
+                                             **common_dataloader_params)
+
+            self.sst_test_dataloader = sst_test_dataloader
+            self.para_test_dataloader = para_test_dataloader
+            self.sts_test_dataloader = sts_test_dataloader
+
     
     def iter_impl(self, dataloader, tqdm_desc, test_max_batch):
 
