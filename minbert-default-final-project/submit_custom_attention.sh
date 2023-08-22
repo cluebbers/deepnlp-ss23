@@ -1,7 +1,6 @@
 #!/bin/bash
-CUSTOM_ATTENTION="BertSelfAttention"
 #SBATCH --job-name=BertSelfAttention
-#SBATCH -t 00:20:00
+#SBATCH -t 00:10:00
 #SBATCH -p grete:shared
 #SBATCH -G A100:1
 #SBATCH --mem-per-gpu=6G
@@ -30,6 +29,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Execute the script.
+CUSTOM_ATTENTION="BertSelfAttention"
 python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --option=finetune --logdir=$CUSTOM_ATTENTION --save=False --custom_attention=$CUSTOM_ATTENTION \
     --sst_dev_out="predictions/$CUSTOM_ATTENTION-sst-dev-output.csv" \
     --sst_test_out="predictions/$CUSTOM_ATTENTION-sst-test-output.csv" \
