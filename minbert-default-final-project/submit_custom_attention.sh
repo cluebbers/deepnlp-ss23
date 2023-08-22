@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mail-type=all
 #SBATCH --mail-user=moataz.dawor@stud.uni-goettingen.de,lukas.niegsch@stud.uni-goettingen.de
-#SBATCH --output=slurm_files/slurm-%x-%j.out
-#SBATCH --error=slurm_files/slurm-%x-%j.err
+#SBATCH --output=slurm_files/%x-slurm-%j.out
+#SBATCH --error=slurm_files/%x-slurm-%j.err
 
 # Load modules and environment.
 module load anaconda3
