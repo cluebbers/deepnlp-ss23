@@ -84,7 +84,7 @@ def train_multitask(args):
     model = model.to(device)
     
     # OPTUNA
-    for _ in range(args.n_trials):
+    for _ in tqdm(range(args.n_trials)):
         # optimizer choice 
         trial = study.ask()
         pruned_trial = False
