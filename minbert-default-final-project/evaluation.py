@@ -242,9 +242,7 @@ def test_model_multitask(args, model, device):
 
     _,dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids,_,_,_, \
         _,dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids,_,_,_,_,dev_sts_corr, \
-        dev_sts_y_pred, dev_sts_sent_ids = model_eval_multitask(dataloaders.sst_dev_dataloader,
-                                                                dataloaders.para_dev_dataloader,
-                                                                dataloaders.sts_dev_dataloader, model, device)
+        dev_sts_y_pred, dev_sts_sent_ids = model_eval_multitask(model, device, dataloaders, dev = True)
 
     test_para_y_pred, test_para_sent_ids, test_sst_y_pred, \
         test_sst_sent_ids, test_sts_y_pred, test_sts_sent_ids = \
@@ -254,33 +252,33 @@ def test_model_multitask(args, model, device):
 
     with open(args.sst_dev_out, "w+") as f:
         print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
-        f.write(f"id \t Predicted_Sentiment \n")
+        f.write(f"id,Predicted_Sentiment\n")
         for p, s in zip(dev_sst_sent_ids, dev_sst_y_pred):
-            f.write(f"{p} , {s} \n")
+            f.write(f"{p},{s}\n")
 
     with open(args.sst_test_out, "w+") as f:
-        f.write(f"id \t Predicted_Sentiment \n")
+        f.write(f"id,Predicted_Sentiment")
         for p, s in zip(test_sst_sent_ids, test_sst_y_pred):
-            f.write(f"{p} , {s} \n")
+            f.write(f"{p},{s}\n")
 
     with open(args.para_dev_out, "w+") as f:
         print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
-        f.write(f"id \t Predicted_Is_Paraphrase \n")
+        f.write(f"id,Predicted_Is_Paraphrase \n")
         for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
-            f.write(f"{p} , {s} \n")
+            f.write(f"{p},{s}\n")
 
     with open(args.para_test_out, "w+") as f:
-        f.write(f"id \t Predicted_Is_Paraphrase \n")
+        f.write(f"id,Predicted_Is_Paraphrase \n")
         for p, s in zip(test_para_sent_ids, test_para_y_pred):
-            f.write(f"{p} , {s} \n")
+            f.write(f"{p},{s}\n")
 
     with open(args.sts_dev_out, "w+") as f:
         print(f"dev sts corr :: {dev_sts_corr :.3f}")
-        f.write(f"id \t Predicted_Similiary \n")
+        f.write(f"id,Predicted_Similiary \n")
         for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
-            f.write(f"{p} , {s} \n")
+            f.write(f"{p},{s}\n")
 
     with open(args.sts_test_out, "w+") as f:
-        f.write(f"id \t Predicted_Similiary \n")
+        f.write(f"id,Predicted_Similiary \n")
         for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
-            f.write(f"{p} , {s} \n")
+            f.write(f"{p},{s}\n")
