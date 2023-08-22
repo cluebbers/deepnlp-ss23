@@ -37,6 +37,3 @@ python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --option=finet
     --para_test_out="predictions/$CUSTOM_ATTENTION-para-test-output.csv" \
     --sts_dev_out="predictions/$CUSTOM_ATTENTION-sts-dev-output.csv" \
     --sts_test_out="predictions/$CUSTOM_ATTENTION-sts-test-output.csv" \
-    --num_batches_para=3 \
-    --num_batches_sst=3 \
-    --num_batches_sts=3
