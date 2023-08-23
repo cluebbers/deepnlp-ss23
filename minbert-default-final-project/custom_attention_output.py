@@ -9,6 +9,10 @@ class Score:
 
 
 def is_score_line(line):
+    if 'acc ::' in line:
+        return True
+    if 'corr ::' in line:
+        return True
     if 'accuracy:' in line:
         return True
     if 'correlation:' in line:
@@ -23,7 +27,7 @@ def score_lines(file):
         yield line
 
 def parse_score(line):
-    dirty_string = line.split(':')[1]
+    dirty_string = line.split(':')[-1]
     clean_string = dirty_string.strip()
     return float(clean_string)
 
@@ -39,12 +43,21 @@ def chunks(l, n):
 def clean_output(file_path: str):
     scores = list(score_values(file_path))
     scores = [Score(a, b, c) for a, b, c, in chunks(scores, 3)]
+    scores.pop()
+    final_score = scores.pop()
+    final_score.para, final_score.sst = final_score.sst, final_score.para
 
     for i, (train_score, dev_score) in enumerate(chunks(scores, 2)):
         print(f'Epoch #{i}')
         print(f'train_score: {train_score}')
         print(f'dev_score:   {dev_score}')
         print('-' * 52)
+    
+    print('Final Score:')
+    print(f'dev_score:   {dev_score}')
+    print('-' * 52)
+
+    
 
 for file_path in glob.glob('slurm_files/*.out'):
     print(file_path)
