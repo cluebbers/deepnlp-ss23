@@ -107,8 +107,15 @@ Our model achieves the following performance on :
 | ------------------ |---------------- | -------------- | ---
 | Baseline  |     51 %         |      85 %       | 52 % |
 | State-of-the-Art  |     59.8 %         |      90.7%       | 93%  |
-| CenterMatrixLinearSelfAttentionWithSparsemax  |  26.9% | 74% | 18.7% |
-
+| BertSelfAttention (no augmentation)          | 44.6% | 77.2% | 48.3% |
+| LinearSelfAttention                          | 40.5% | 75.6% | 37.8% |
+| NoBiasLinearSelfAttention                    | later | later | later |
+| SparsemaxSelfAttention                       | 39.0% | 70.7% | 56.8% |
+| CenterMatrixSelfAttention                    | 39.1% | 76.4% | 43.4% |
+| LinearSelfAttentionWithSparsemax             | later | later | later |
+| CenterMatrixSelfAttentionWithSparsemax       | 39.1% | 75.6% | 40.4% |
+| CenterMatrixLinearSelfAttention              | 42.4% | 76.2% | 42.4% |
+| CenterMatrixLinearSelfAttentionWithSparsemax | later | later | later |
 
 [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0)
 
