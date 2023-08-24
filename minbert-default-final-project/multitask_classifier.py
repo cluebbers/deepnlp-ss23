@@ -21,7 +21,7 @@ from models import *
 from evaluation import test_model_multitask
 
 # CLL import multitask evaluation
-from evaluation import model_eval_multitask
+from evaluation import smart_eval
 # tensorboard
 from torch.utils.tensorboard import SummaryWriter
 # SOPHIA
@@ -372,7 +372,7 @@ def train_multitask(args):
         
         (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
          _,train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
-         _,train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
+         _,train_sts_corr, *_ )= smart_eval(sst_train_dataloader,
                                                     para_train_dataloader,
                                                     sts_train_dataloader,
                                                     model, device)
@@ -395,7 +395,7 @@ def train_multitask(args):
         
         (para_loss,dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
          sst_loss,dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
-         sts_loss,dev_sts_cor, *_ )= model_eval_multitask(sst_dev_dataloader,
+         sts_loss,dev_sts_cor, *_ )= smart_eval(sst_dev_dataloader,
                                                  para_dev_dataloader,
                                                  sts_dev_dataloader,
                                                  model, device)        
