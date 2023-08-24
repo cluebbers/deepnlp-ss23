@@ -166,7 +166,7 @@ class SharedMultitaskBERT(nn.Module):
         self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
         
         # paraphrase classifier
-        self.paraphrase_classifier = torch.nn.Linear(self.hidden_size, 1)
+        self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*3, 1)
         
         #cosine similarity classifier
         self.similarity_classifier = torch.nn.CosineSimilarity()
@@ -205,8 +205,13 @@ class SharedMultitaskBERT(nn.Module):
             similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5      
             if task_id == 2: # Semantic Textual Similarity
                 return similarity
-            elif task_id == 1: 
-                return self.predict_similarity(embed_1, embed_2)
+            elif task_id == 1: # Paraphrase detection
+                diff = torch.abs(embed_1 - embed_2)
+                prod = embed_1 * embed_2
+                similarity_expanded = similarity.unsqueeze(-1).repeat(1, 768)
+                # Concatenate diff, prod, and similarity for paraphrase classification
+                features = torch.cat([diff, prod, similarity_expanded], dim=-1)
+                return self.paraphrase_classifier(features).squeeze(-1)
             else:
                 raise ValueError("Invalid task_id")
             
