@@ -200,7 +200,7 @@ def update_optimizer(optimizer, args, num_batches):
     optimizer.update_hessian()
 
 
-def train_step_sts(model, dataloaders, optimizer, epoch, args):
+def train_step_sts_generator(model, dataloaders, optimizer, epoch, args):
     model.train()
     for i, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels) in enumerate(dataloaders.iter_train_sts(epoch)):
         optimizer.zero_grad(set_to_none=True)
@@ -219,7 +219,7 @@ def train_step_sts(model, dataloaders, optimizer, epoch, args):
         update_optimizer(optimizer, args, i)
         yield train_loss
 
-def train_step_sst(model, dataloaders, optimizer, epoch, args):
+def train_step_sst_generator(model, dataloaders, optimizer, epoch, args):
     model.train()
     for i, (b_ids, b_mask, b_labels) in enumerate(dataloaders.iter_train_sst(epoch)):
         optimizer.zero_grad(set_to_none=True)
@@ -231,7 +231,7 @@ def train_step_sst(model, dataloaders, optimizer, epoch, args):
         update_optimizer(optimizer, args, i)
         yield train_loss
 
-def train_step_para(model, dataloaders, optimizer, epoch, args):
+def train_step_para_generator(model, dataloaders, optimizer, epoch, args):
     model.train()
     for i, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels) in enumerate(dataloaders.iter_train_para(epoch)):
         optimizer.zero_grad(set_to_none=True)
@@ -272,9 +272,9 @@ def train_multitask(args):
 
     for epoch in range(args.epochs):
         # Mixed training (para), (sst, para), (sts, para, sst)
-        sts_generator = lambda: train_step_sts(model, dataloaders, optimizer, epoch, args)
-        sst_generator = lambda: train_step_sst(model, dataloaders, optimizer, epoch, args)
-        para_generator = lambda: train_step_para(model, dataloaders, optimizer, epoch, args)
+        sts_generator = train_step_sts_generator(model, dataloaders, optimizer, epoch, args)
+        sst_generator = train_step_sst_generator(model, dataloaders, optimizer, epoch, args)
+        para_generator = train_step_para_generator(model, dataloaders, optimizer, epoch, args)
 
         size_language_training = (dataloaders.para_train_dataloader_size-dataloaders.sst_train_dataloader_size)
         size_language_pretrain = (dataloaders.sst_train_dataloader_size-dataloaders.sts_train_dataloader_size)
@@ -284,12 +284,12 @@ def train_multitask(args):
         sts_loss = 0
         para_loss = 0
 
-        para_loss += sum(para_generator() for _ in range(size_language_training)) 
-        sst_loss += sum(sst_generator() for _ in range(size_language_pretrain)) 
-        para_loss += sum(para_generator() for _ in range(size_language_pretrain)) 
-        sts_loss += sum(sts_generator() for _ in range(size_language_finetune)) 
-        para_loss += sum(para_generator() for _ in range(size_language_finetune)) 
-        sst_loss += sum(sst_generator() for _ in range(size_language_finetune)) 
+        para_loss += sum(islice(para_generator, size_language_training))
+        sst_loss += sum(islice(sst_generator, size_language_pretrain)) 
+        para_loss += sum(islice(para_generator, size_language_pretrain)) 
+        sts_loss += sum(islice(sts_generator, size_language_finetune))
+        para_loss += sum(islice(para_generator, size_language_finetune))
+        sst_loss += sum(islice(sst_generator, size_language_finetune)) 
 
         sts_loss = sts_loss / dataloaders.sts_train_dataloader_size
         sst_loss = sst_loss / dataloaders.sst_train_dataloader_size
