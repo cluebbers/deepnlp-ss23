@@ -22,10 +22,11 @@ import itertools
 # tensorboard
 from torch.utils.tensorboard import SummaryWriter
 # SOPHIA
-from optimizer_sophia import SophiaG
+from optimizer import SophiaG
 # SMART regularization
 from smart_perturbation import SmartPerturbation
 import smart_utils as smart
+from models import *
 # PCGrad
 from pcgrad import PCGrad
 
@@ -83,7 +84,7 @@ def train_multitask(args):
 
     config = SimpleNamespace(**config)
 
-    model = smart.SmartMultitaskBERT(config)
+    model = SmartMultitaskBERT(config)
     model = model.to(device)
 
     lr = args.lr
