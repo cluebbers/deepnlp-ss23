@@ -370,7 +370,7 @@ def optuna_eval(sentiment_dataloader,
         para_y_pred = []        
         num_batches = 0
         
-        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval-para', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval-para', disable=False)):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_labels) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -400,7 +400,7 @@ def optuna_eval(sentiment_dataloader,
         sts_y_true = []
         sts_y_pred = []
         
-        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval-sts', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval-sts', disable=False)):
             (b_ids1, b_mask1,
              b_ids2, b_mask2,
              b_labels) = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -428,7 +428,7 @@ def optuna_eval(sentiment_dataloader,
         sst_y_true = []
         sst_y_pred = []
         
-        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval-sst', disable=TQDM_DISABLE)):
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval-sst', disable=False)):
             b_ids, b_mask, b_labels = batch['token_ids'], batch['attention_mask'], batch['labels']
 
             b_ids = b_ids.to(device)
@@ -533,6 +533,9 @@ def smart_eval(sentiment_dataloader,
             sts_y_true.extend(b_labels)
             sts_sent_ids.extend(b_sent_ids)
             
+            if num_batches >= n_iter:
+                break  
+            
         sts_loss = sts_loss/num_batches #normalize sts_loss
         
         pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
@@ -565,7 +568,10 @@ def smart_eval(sentiment_dataloader,
 
             sst_y_pred.extend(y_hat)
             sst_y_true.extend(b_labels)
-            sst_sent_ids.extend(b_sent_ids)  
+            sst_sent_ids.extend(b_sent_ids) 
+            
+            if num_batches >= n_iter:
+                break   
             
         sst_loss = sst_loss/num_batches #normalize loss
 
