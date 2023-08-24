@@ -199,11 +199,7 @@ def update_optimizer(optimizer, args, num_batches):
 
 def train_step_sts(model, dataloaders, optimizer, epoch, args):
     model.train()
-    train_loss = 0
-    num_batches = 0        
-        
-    for b_ids1, b_mask1, b_ids2, b_mask2, b_labels in dataloaders.iter_train_sts(epoch):
-
+    for i, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels) in enumerate(dataloaders.iter_train_sts(epoch)):
         optimizer.zero_grad(set_to_none=True)
         similarity = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
         # we need a loss function for similarity
@@ -216,57 +212,37 @@ def train_step_sts(model, dataloaders, optimizer, epoch, args):
             loss.requires_grad = True
         loss.backward()
         optimizer.step()
-
-        train_loss += loss.item()
-        num_batches += 1
-        update_optimizer(optimizer, args, num_batches)
-
-    train_loss = train_loss / num_batches
-    return  train_loss
+        train_loss = loss.item()
+        update_optimizer(optimizer, args, i)
+        yield train_loss
 
 def train_step_sst(model, dataloaders, optimizer, epoch, args):
     model.train()
-    train_loss = 0
-    num_batches = 0
-    for b_ids, b_mask, b_labels in dataloaders.iter_train_sst(epoch):
-
+    for i, (b_ids, b_mask, b_labels) in enumerate(dataloaders.iter_train_sst(epoch)):
         optimizer.zero_grad(set_to_none=True)
         logits = model.predict_sentiment(b_ids, b_mask)
         loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
-
         loss.backward()
         optimizer.step()
-
-        train_loss += loss.item()
-        num_batches += 1
-        update_optimizer(optimizer, args, num_batches)
-
-    return train_loss / (num_batches)
+        train_loss = loss.item()
+        update_optimizer(optimizer, args, i)
+        yield train_loss
 
 def train_step_para(model, dataloaders, optimizer, epoch, args):
     model.train()
-    train_loss = 0
-    num_batches = 0
-    # datasets.py line 145
-    for b_ids1, b_mask1, b_ids2, b_mask2, b_labels in dataloaders.iter_train_para(epoch):
-        
+    for i, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels) in enumerate(dataloaders.iter_train_para(epoch)):
         optimizer.zero_grad(set_to_none=True)
         logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-        
         # we need a loss function that handles logits. maybe this one?
         # paraphrasing is a binary task, so binary
         # we get logits, so logits
         # this one also has a sigmoid activation function
         loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
-
         loss.backward()
         optimizer.step()
-
-        train_loss += loss.item()
-        num_batches += 1
-        update_optimizer(optimizer, args, num_batches)
-
-    return train_loss / num_batches
+        train_loss = loss.item()
+        update_optimizer(optimizer, args, i)
+        yield train_loss
 
 def train_multitask(args):
     device      = torch.device('cuda') if args.use_gpu else torch.device('cpu')
@@ -293,32 +269,28 @@ def train_multitask(args):
 
     for epoch in range(args.epochs):
         #train on semantic textual similarity (sts)
-        train_loss = train_step_sts(model, dataloaders, optimizer, epoch, args)
+        sts_generator = train_step_sts(model, dataloaders, optimizer, epoch, args)
+        sts_loss = sum(sts_generator) / dataloaders.sts_train_dataloader_size
+
         # tensorboard
-        writer.add_scalar("sts/train_loss", train_loss, epoch)
-        
-        print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {train_loss:.3f}")
+        writer.add_scalar("sts/train_loss", sts_loss, epoch)
+        print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {sts_loss:.3f}")
 
         # train on sentiment analysis
-        train_loss = train_step_sst(model, dataloaders, optimizer, epoch, args)
-        # tensorboard
-        writer.add_scalar("sst/train_loss", train_loss, epoch)
+        sst_generator = train_step_sst(model, dataloaders, optimizer, epoch, args)
+        sst_loss = sum(sst_generator) / dataloaders.sst_train_dataloader_size
 
-        print(f"Epoch {epoch}: Sentiment classification -> train loss :: {train_loss :.3f}")
+        # tensorboard
+        writer.add_scalar("sst/train_loss", sst_loss, epoch)
+        print(f"Epoch {epoch}: Sentiment classification -> train loss :: {sst_loss :.3f}")
 
         # train on paraphrasing
-        # CLL add training on other tasks
-        # paraphrasing
-        # see evaluation.py line 72
-
-        
-        train_loss = train_step_para(model, dataloaders, optimizer, epoch, args)
-        
+        para_generator = train_step_para(model, dataloaders, optimizer, epoch, args)
+        para_loss = sum(para_generator) / dataloaders.para_train_dataloader_size
+    
         # tensorboard
-        writer.add_scalar("para/train_loss", train_loss, epoch)
-        
-        print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
-        
+        writer.add_scalar("para/train_loss", para_loss, epoch)
+        print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {para_loss:.3f}")
 
         if args.profiler:
             break
