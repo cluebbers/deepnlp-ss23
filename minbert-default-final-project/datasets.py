@@ -355,6 +355,10 @@ class MultitaskDataloader:
         self.TQDM_DISABLE          = False
         self.profiler              = None
 
+        self.sts_train_dataloader_size = len(sts_train_dataloader) 
+        self.sst_train_dataloader_size = len(sst_train_dataloader)
+        self.para_train_dataloader_size = len(para_train_dataloader)
+
         if args.profiler:
             self.profiler = torch.profiler.profile(
                 activities = [torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
