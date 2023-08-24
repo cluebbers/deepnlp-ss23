@@ -101,6 +101,7 @@ def train_multitask(args):
         
     # PCGrad
     if args.pcgrad:
+        optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         optimizer = PCGrad(optimizer)
     
     # tensorboard writer
@@ -351,7 +352,7 @@ def get_args():
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
     parser.add_argument("--local_files_only", action='store_true'),
-    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="sophiag")
+    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw")
     parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0)
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)
     parser.add_argument("--smart", action="store_true")   
