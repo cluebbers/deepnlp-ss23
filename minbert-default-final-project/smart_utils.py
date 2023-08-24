@@ -194,3 +194,69 @@ class SmartMultitaskBERT(nn.Module):
         similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
         
         return similarity
+    
+class SharedMultitaskBERT(nn.Module):
+    '''
+    This module should use BERT for 3 tasks:
+
+    - Sentiment classification (predict_sentiment)
+    - Paraphrase detection (predict_paraphrase)
+    - Semantic Textual Similarity (predict_similarity)
+    '''
+    def __init__(self, config):
+        super().__init__()
+        self.bert = load_bert_model(config)
+
+        self.hidden_size = BERT_HIDDEN_SIZE
+        self.num_labels = N_SENTIMENT_CLASSES
+        
+        # see bert.BertModel.embed
+        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        
+        # linear sentiment classifier
+        self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
+        
+        # paraphrase classifier
+        self.paraphrase_classifier = torch.nn.Linear(self.hidden_size, 1)
+        
+        #cosine similarity classifier
+        self.similarity_classifier = torch.nn.CosineSimilarity()
+
+    def forward(self,
+        input_ids_1,        
+        attention_mask_1,
+        input_ids_2=None,
+        attention_mask_2=None,
+        task_id=0,
+        task_na=0,
+        embednoise_1=None,
+        embednoise_2=None):
+        
+        # use SMART noised embeddings if present
+        if task_na==2:
+            embed_1 = embednoise_1
+            embed_2 = embednoise_2 if embednoise_2 is not None else None
+        else:          
+            # input embeddings
+            embed_1 = self.bert(input_ids_1, attention_mask_1)['pooler_output']            
+            embed_2 = self.bert(input_ids_2, attention_mask_2)['pooler_output'] if input_ids_2 is not None else None
+            
+        embed_1 = self.dropout(embed_1)
+        embed_2 = self.dropout(embed_2) if input_ids_2 is not None else None
+        
+        # return embeddings for smart or proceed with logits
+        if task_na == 1:
+            return embed_1, embed_2
+        
+        if task_id == 0: # Sentiment classification
+            sentiment_logit = self.sentiment_classifier(embed_1)        
+            return sentiment_logit
+
+        else: 
+            similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5      
+            if task_id == 2: # Semantic Textual Similarity
+                return similarity
+            elif task_id == 1: 
+                return self.predict_similarity(embed_1, embed_2)
+            else:
+                raise ValueError("Invalid task_id")
