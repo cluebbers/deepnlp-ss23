@@ -1,15 +1,4 @@
 # Copyright (c) Microsoft. All rights reserved.
-# changed order of vat_args
-# original:
-# vat_args = [
-#             input_ids,
-#             token_type_ids,
-#             attention_mask,            
-#             premise_mask,
-#             hyp_mask,
-#             task_id,
-#             1,
-#         ]
 
 from copy import deepcopy
 import torch
