@@ -26,6 +26,9 @@ from optimizer_sophia import SophiaG
 from torch.profiler import profile, record_function, ProfilerActivity
 from custom_attention import *
 
+from functools import *
+from itertools import *
+
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
 
@@ -268,27 +271,22 @@ def train_multitask(args):
     best_dev_acc = 0
 
     for epoch in range(args.epochs):
-        #train on semantic textual similarity (sts)
-        sts_generator = train_step_sts(model, dataloaders, optimizer, epoch, args)
-        sts_loss = sum(sts_generator) / dataloaders.sts_train_dataloader_size
+        sts_generator = lambda: train_step_sts(model, dataloaders, optimizer, epoch, args)
+        sst_generator = lambda: train_step_sst(model, dataloaders, optimizer, epoch, args)
+        para_generator = lambda: train_step_para(model, dataloaders, optimizer, epoch, args)
 
+        #train on semantic textual similarity (sts)
+        sts_loss = sum(sts_generator() for _ in range(dataloaders.sts_train_dataloader_size)) / dataloaders.sts_train_dataloader_size
+        # train on sentiment analysis
+        sst_loss = sum(sst_generator() for _ in range(dataloaders.sst_train_dataloader_size)) / dataloaders.sst_train_dataloader_size
+        # train on paraphrasing
+        para_loss = sum(para_generator() for _ in range(dataloaders.para_train_dataloader_size)) / dataloaders.para_train_dataloader_size
+    
         # tensorboard
         writer.add_scalar("sts/train_loss", sts_loss, epoch)
         print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {sts_loss:.3f}")
-
-        # train on sentiment analysis
-        sst_generator = train_step_sst(model, dataloaders, optimizer, epoch, args)
-        sst_loss = sum(sst_generator) / dataloaders.sst_train_dataloader_size
-
-        # tensorboard
         writer.add_scalar("sst/train_loss", sst_loss, epoch)
         print(f"Epoch {epoch}: Sentiment classification -> train loss :: {sst_loss :.3f}")
-
-        # train on paraphrasing
-        para_generator = train_step_para(model, dataloaders, optimizer, epoch, args)
-        para_loss = sum(para_generator) / dataloaders.para_train_dataloader_size
-    
-        # tensorboard
         writer.add_scalar("para/train_loss", para_loss, epoch)
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {para_loss:.3f}")
 
