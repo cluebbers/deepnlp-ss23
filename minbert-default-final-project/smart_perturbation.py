@@ -83,7 +83,7 @@ class SmartPerturbation:
                 eff_direction = eff_grad / (
                     grad.abs().max(-1, keepdim=True)[0] + self.epsilon
                 )
-        return direction, eff_direction
+        return direction
 
     def forward(
         self,
@@ -134,7 +134,7 @@ class SmartPerturbation:
             ]
             adv_logits = model(*vat_args)
             if task_type == TaskType.Regression:
-                adv_loss = F.mse_loss(adv_logits, logits.detach(), reduction="sum")
+                adv_loss = F.mse_loss(adv_logits, logits.detach(), reduction="mean")
             else:
                 adv_loss = stable_kl(adv_logits, logits.detach(), reduce=False)
                 
@@ -152,7 +152,7 @@ class SmartPerturbation:
                 return 0
             eff_delta_grad_1 = delta_grad_1 * self.step_size
             delta_grad_1 = noise_1 + eff_delta_grad_1
-            noise_1, eff_noise_1 = self._norm_grad(
+            noise_1 = self._norm_grad(
                 delta_grad_1, eff_grad=eff_delta_grad_1, sentence_level=self.norm_level
             )
             noise_1 = noise_1.detach()
@@ -165,7 +165,7 @@ class SmartPerturbation:
                     return 0
                 eff_delta_grad_2 = delta_grad_2 * self.step_size
                 delta_grad_2 = noise_2 + eff_delta_grad_2
-                noise_2, eff_noise_2 = self._norm_grad(
+                noise_2 = self._norm_grad(
                     delta_grad_2, eff_grad=eff_delta_grad_2, sentence_level=self.norm_level
                 )
                 noise_2 = noise_2.detach()
