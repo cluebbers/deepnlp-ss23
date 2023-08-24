@@ -16,7 +16,7 @@ from tqdm import tqdm
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
-from evaluation import test_model_multitask
+from evaluation import smart_eval
 
 # CLL import multitask evaluation
 from evaluation import model_eval_multitask
@@ -89,7 +89,7 @@ def train_multitask(args):
     weight_decay = args.weight_decay
 
     if args.optimizer == "sophiag":
-        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
+        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99),weight_decay=weight_decay)
         #how often to update the hessian?
         k = args.k_for_sophia
     else:
@@ -120,6 +120,8 @@ def train_multitask(args):
     best_sst_dev_acc = 0
     best_sts_dev_cor = 0
     best_dev_acc = 0
+    
+    n_iter = len(para_train_dataloader)
                   
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -162,7 +164,7 @@ def train_multitask(args):
             else:
                 adv_loss = 0
             
-            original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
+            original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
             loss = original_loss + adv_loss
             
             if args.option == "pretrain":
@@ -331,7 +333,7 @@ def train_multitask(args):
                     break   
                 
             # TODO for testing
-            if num_batches >= args.num_batches_para:
+            if num_batches >= n_iter:
                  break            
 
         train_loss = train_loss / num_batches
@@ -350,10 +352,10 @@ def train_multitask(args):
         
         (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
          _,train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
-         _,train_sts_corr, *_ )= model_eval_multitask(sst_train_dataloader,
+         _,train_sts_corr, *_ )= smart_eval(sst_train_dataloader,
                                                     para_train_dataloader,
                                                     sts_train_dataloader,
-                                                    model, device)
+                                                    model, device, n_iter)
          
         # tensorboard   
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
@@ -373,10 +375,10 @@ def train_multitask(args):
         
         (para_loss,dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
          sst_loss,dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
-         sts_loss,dev_sts_cor, *_ )= model_eval_multitask(sst_dev_dataloader,
+         sts_loss,dev_sts_cor, *_ )= smart_eval(sst_dev_dataloader,
                                                  para_dev_dataloader,
                                                  sts_dev_dataloader,
-                                                 model, device)        
+                                                 model, device, n_iter)        
 
         # tensorboard
         writer.add_scalar("para/dev_loss", para_loss, epoch)
@@ -444,22 +446,6 @@ def train_multitask(args):
     writer.flush()
     writer.close()
 
-    
-    
-def test_model(args):
-    with torch.no_grad():
-        device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-        saved = torch.load(args.filepath)
-        config = saved['model_config']
-
-        model = smart.SmartMultitaskBERT(config)
-        model.load_state_dict(saved['model'])
-        model = model.to(device)
-        print(f"Loaded model to test from {args.filepath}")
-
-        test_model_multitask(args, model, device)
-
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sst_train", type=str, default="data/ids-sst-train.csv")
@@ -491,7 +477,7 @@ def get_args():
     parser.add_argument("--sts_test_out", type=str, default="predictions/sts-test-output.csv")
 
     # hyper parameters
-    parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=10)
+    parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=20)
     parser.add_argument("--num_batches_para", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
     parser.add_argument("--num_batches_sst", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
     parser.add_argument("--num_batches_sts", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
@@ -500,8 +486,8 @@ def get_args():
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
     parser.add_argument("--local_files_only", action='store_true', default = True),
-    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw"),
-    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0.01),
+    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="sophiag"),
+    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
     parser.add_argument("--profiler", action="store_true")
     
@@ -519,6 +505,3 @@ if __name__ == "__main__":
     seed_everything(args.seed)  # fix the seed for reproducibility    
     
     train_multitask(args)
-
-    # if not args.profiler:
-    #     test_model(args)
