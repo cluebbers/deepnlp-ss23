@@ -26,7 +26,8 @@ from optimizer_sophia import SophiaG
 # SMART regularization
 from smart_perturbation import SmartPerturbation
 import smart_utils as smart
-import torch.optim.lr_scheduler as lrscheduler
+# PCGrad
+from pcgrad import PCGrad
 
 TQDM_DISABLE=False
 
@@ -85,20 +86,21 @@ def train_multitask(args):
     model = smart.SmartMultitaskBERT(config)
     model = model.to(device)
 
-    # TODO: maybe different learning rate for different tasks?
     lr = args.lr
     weight_decay = args.weight_decay    
 
     if args.optimizer == "sophiag":
-        lr = args.lr
-        weight_decay = args.weight_decay
         optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), weight_decay=weight_decay)
         #how often to update the hessian?
         k = args.k_for_sophia
-    else:
-        lr = args.lr
-        weight_decay = args.weight_decay   
+    elif args.optimizer == "adamw":
         optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    else:
+        print("no known optimizer")
+        
+    # PCGrad
+    if args.pcgrad:
+        optimizer = PCGrad(optimizer)
     
     # tensorboard writer
     writer = SummaryWriter(comment = args.comment)
@@ -210,8 +212,13 @@ def train_multitask(args):
                 loss_para = F.binary_cross_entropy_with_logits(paraphrase_logits, b_labels.view(-1).float(), reduction='mean')
                 loss_para = loss_para + adv_loss
                 combined_loss += loss_para
-                     
-            combined_loss.backward()            
+            
+            if args.pcgrad:
+                losses = [loss_para, loss_sts, loss_sst]
+                optimizer.pc_backward(losses)
+            else:                     
+                combined_loss.backward()  
+                          
             optimizer.step()         
             total_loss += combined_loss.item()
             num_batches += 1
@@ -338,16 +345,17 @@ def get_args():
     parser.add_argument("--sts_test_out", type=str, default="predictions/sts-test-output.csv")
 
     # hyper parameters
-    parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=18)
+    parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=2)
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
-                        default=1e-4)
+                        default=1e-5)
     parser.add_argument("--local_files_only", action='store_true'),
     parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="sophiag")
-    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=1e-1)
+    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0)
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)
     parser.add_argument("--smart", action="store_true")   
-    parser.add_argument("--comment", type=str)
+    parser.add_argument("--comment", type=str, default="")
+    parser.add_argument("--pcgrad", action="store_true")
 
     args = parser.parse_args()
     return args
