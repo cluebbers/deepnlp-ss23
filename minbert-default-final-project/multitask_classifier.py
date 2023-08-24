@@ -271,16 +271,29 @@ def train_multitask(args):
     best_dev_acc = 0
 
     for epoch in range(args.epochs):
+        # Mixed training (para), (sst, para), (sts, para, sst)
         sts_generator = lambda: train_step_sts(model, dataloaders, optimizer, epoch, args)
         sst_generator = lambda: train_step_sst(model, dataloaders, optimizer, epoch, args)
         para_generator = lambda: train_step_para(model, dataloaders, optimizer, epoch, args)
 
-        #train on semantic textual similarity (sts)
-        sts_loss = sum(sts_generator() for _ in range(dataloaders.sts_train_dataloader_size)) / dataloaders.sts_train_dataloader_size
-        # train on sentiment analysis
-        sst_loss = sum(sst_generator() for _ in range(dataloaders.sst_train_dataloader_size)) / dataloaders.sst_train_dataloader_size
-        # train on paraphrasing
-        para_loss = sum(para_generator() for _ in range(dataloaders.para_train_dataloader_size)) / dataloaders.para_train_dataloader_size
+        size_language_training = (dataloaders.para_train_dataloader_size-dataloaders.sst_train_dataloader_size)
+        size_language_pretrain = (dataloaders.sst_train_dataloader_size-dataloaders.sts_train_dataloader_size)
+        size_language_finetune = dataloaders.sts_train_dataloader_size
+
+        sst_loss = 0
+        sts_loss = 0
+        para_loss = 0
+
+        para_loss += sum(para_generator() for _ in range(size_language_training)) 
+        sst_loss += sum(sst_generator() for _ in range(size_language_pretrain)) 
+        para_loss += sum(para_generator() for _ in range(size_language_pretrain)) 
+        sts_loss += sum(sts_generator() for _ in range(size_language_finetune)) 
+        para_loss += sum(para_generator() for _ in range(size_language_finetune)) 
+        sst_loss += sum(sst_generator() for _ in range(size_language_finetune)) 
+
+        sts_loss = sts_loss / dataloaders.sts_train_dataloader_size
+        sst_loss = sst_loss / dataloaders.sst_train_dataloader_size
+        para_loss = para_loss / dataloaders.para_train_dataloader_size
     
         # tensorboard
         writer.add_scalar("sts/train_loss", sts_loss, epoch)
