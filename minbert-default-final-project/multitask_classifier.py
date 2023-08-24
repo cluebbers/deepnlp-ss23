@@ -233,16 +233,7 @@ def train_multitask(args):
     
     # tensorboard writer
     writer = SummaryWriter(comment = args.logdir)
-    # tensorboard
-    # collect all information of run    
-    writer.add_hparams({"epochs":args.epochs,
-                        "optimizer":args.optimizer, 
-                        "lr":args.lr, 
-                        "weight_decay":args.weight_decay,
-                        "k_for_sophia":args.k_for_sophia,
-                        "hidden_dropout_prob": args.hidden_dropout_prob,
-                        "batch_size":args.batch_size})
-    
+
     # profiler
     profiler = args.profiler
     if profiler:            
