@@ -1,0 +1,9 @@
+A new study created in memory with name: Regularization
+A new study created in memory with name: Regularization
+A new study created in memory with name: Regularization
+A new study created in memory with name: Regularization
+A new study created in memory with name: Regularization
+A new study created in memory with name: Regularization
+A new study created in memory with name: Regularization
+Output figures of this Matplotlib-based `plot_contour` function would be different from those of the Plotly-based `plot_contour`.
+Output figures of this Matplotlib-based `plot_rank` function would be different from those of the Plotly-based `plot_rank`.
