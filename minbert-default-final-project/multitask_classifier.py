@@ -128,6 +128,8 @@ def train_multitask(args):
     best_sst_dev_acc = 0
     best_sts_dev_cor = 0
     best_dev_acc = 0
+    
+    n_iter = len(para_train_dataloader)
                   
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -381,7 +383,7 @@ def train_multitask(args):
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
         writer.add_scalar("para/train-prec", train_para_prec, epoch)
         writer.add_scalar("para/train-rec", train_para_rec, epoch)
-        writer.add_scalar("para/train-f1", train_para_f1, epoch)
+        writer.add_scalar("para/train-f1", train_para_f1, epoch, n_iter)
         
         writer.add_scalar("sst/train-acc", train_sst_acc, epoch)
         for i, class_precision in enumerate(train_sst_prec):
@@ -398,7 +400,7 @@ def train_multitask(args):
          sts_loss,dev_sts_cor, *_ )= smart_eval(sst_dev_dataloader,
                                                  para_dev_dataloader,
                                                  sts_dev_dataloader,
-                                                 model, device)        
+                                                 model, device, n_iter)        
 
         # tensorboard
         writer.add_scalar("para/dev_loss", para_loss, epoch)
