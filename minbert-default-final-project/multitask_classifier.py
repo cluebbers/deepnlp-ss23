@@ -155,7 +155,7 @@ def train_multitask(args):
             b_labels = b_labels.to(device)
 
             optimizer.zero_grad(set_to_none=True)
-            similarity = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
             
             # SMART
             if args.smart:
@@ -176,7 +176,7 @@ def train_multitask(args):
             # So maybe the mean squared error is a suitable loss function for the beginning,
             # since it punishes a prediction that is far away from the truth disproportionately
             # more than a prediction that is close to the truth
-            original_loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
+            original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
             loss = original_loss + adv_loss          
                 
             if args.option == "pretrain":
