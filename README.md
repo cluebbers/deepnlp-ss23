@@ -109,7 +109,7 @@ Our model achieves the following performance on :
 | State-of-the-Art                             | 59.8% | 90.7% |   93% |
 | BertSelfAttention (no augmentation)          | 44.6% | 77.2% | 48.3% |
 | ReorderedTraining (BertSelfAttention)        | 45.9% | 79.3% | 49.8% |
-| RoundRobinTraining (BertSelfAttention)       | later | later | later |
+| RoundRobinTraining (BertSelfAttention)       | 45.5% | 77.5% | 50.3% |
 | LinearSelfAttention                          | 40.5% | 75.6% | 37.8% |
 | NoBiasLinearSelfAttention                    | 40.5% | 75.6% | 37.8% |
 | SparsemaxSelfAttention                       | 39.0% | 70.7% | 56.8% |
