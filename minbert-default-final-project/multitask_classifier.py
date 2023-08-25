@@ -17,6 +17,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
     load_multitask_data, load_multitask_test_data
 
 from models import *
+from optimizer import SophiaG
 
 from evaluation import test_model_multitask
 
@@ -96,7 +97,7 @@ def train_multitask(args):
     weight_decay = args.weight_decay
 
     if args.optimizer == "sophiag":
-        optimizer = SophiaG2(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
+        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
         #how often to update the hessian?
         k = args.k_for_sophia
     else:
@@ -189,15 +190,9 @@ def train_multitask(args):
             
             # SOPHIA
             # update hession EMA
-            # if args.optimizer == "sophiag" and num_batches % k == k - 1:  
-            #     logits, _ = model(b_ids1, 0, b_ids2, 0, task_id=2)
-            #     samp_dist = torch.distributions.Categorical(logits=logits)
-            #     y_sample = samp_dist.sample()
-            #     loss_sampled = F.cross_entropy(logits.view(-1, logits.size(-1)), y_sample.view(-1), ignore_index=-1)
-            #     loss_sampled.backward()
-            #     optimizer.update_hessian()
-            #     optimizer.zero_grad(set_to_none=True)
-            #     model.zero_grad()                
+            if args.optimizer == "sophiag" and num_batches % k == k - 1:  
+                optimizer.update_hessian()
+                optimizer.zero_grad()       
             
             # profiling step
             if profiler:
@@ -263,15 +258,9 @@ def train_multitask(args):
             
             # SOPHIA
             # update hession EMA
-            # if args.optimizer == "sophiag" and num_batches % k == k - 1:  
-            #     logits, _ = model(b_ids1, 0, task_id=0)
-            #     samp_dist = torch.distributions.Categorical(logits=logits)
-            #     y_sample = samp_dist.sample()
-            #     loss_sampled = F.cross_entropy(logits.view(-1, logits.size(-1)), y_sample.view(-1), ignore_index=-1)
-            #     loss_sampled.backward()
-            #     optimizer.update_hessian()
-            #     optimizer.zero_grad(set_to_none=True)
-            #     model.zero_grad()           
+            if args.optimizer == "sophiag" and num_batches % k == k - 1:  
+                optimizer.update_hessian()
+                optimizer.zero_grad()         
                 
             # profiling step
             if profiler:
@@ -353,15 +342,9 @@ def train_multitask(args):
             
             # SOPHIA
             # update hession EMA
-            # if args.optimizer == "sophiag" and num_batches % k == k - 1:  
-            #     logits, _ = model(b_ids1, 0, b_ids2, 0, task_id=1)
-            #     samp_dist = torch.distributions.Categorical(logits=logits)
-            #     y_sample = samp_dist.sample()
-            #     loss_sampled = F.cross_entropy(logits.view(-1, logits.size(-1)), y_sample.view(-1), ignore_index=-1)
-            #     loss_sampled.backward()
-            #     optimizer.update_hessian()
-            #     optimizer.zero_grad(set_to_none=True)
-            #     model.zero_grad()           
+            if args.optimizer == "sophiag" and num_batches % k == k - 1:  
+                optimizer.update_hessian()
+                optimizer.zero_grad()         
             
             # profiling step
             if profiler:
