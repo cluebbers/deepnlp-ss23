@@ -377,7 +377,7 @@ def train_multitask(args):
          _,train_sts_corr, *_ )= smart_eval(sst_train_dataloader,
                                                     para_train_dataloader,
                                                     sts_train_dataloader,
-                                                    model, device)
+                                                    model, device, n_iter)
          
         # tensorboard   
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
