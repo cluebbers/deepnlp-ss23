@@ -18,8 +18,9 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 
 # CLL import multitask evaluation
 from evaluation import optuna_eval
+from models import *
 # SOPHIA
-from optimizer_sophia import SophiaG
+from optimizer import Sophia
 # SMART regularization
 import smart_utils as smart
 # Optuna
@@ -80,7 +81,7 @@ def train_multitask(args):
     n_iter= len(sst_train_dataloader)
     config = SimpleNamespace(**config)
 
-    model = smart.SmartMultitaskBERT(config)
+    model = SmartMultitaskBERT(config)
     model = model.to(device)
     
     # OPTUNA
@@ -88,89 +89,19 @@ def train_multitask(args):
         # optimizer choice 
         trial = study.ask()
         pruned_trial = False
-        optimizer_name = trial.suggest_categorical("Optimizer", ["AdamW", "SophiaG"])
         
-        
-        # AdamW or SophiaG
-        if optimizer_name == "SophiaG":            
-            lr_sophia = trial.suggest_float("lr-sophia", 1e-5, 1e-3, log=True)
-            weight_decay_sophia = trial.suggest_float("wd_sophia", 1e-5, 1, log=True)
-            rho = trial.suggest_float("rho", 0.1, 0.5) 
-            k = trial.suggest_int("k", 5, 20, step=5)  
-            optimizer = SophiaG(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay_sophia)
-        else:
-            lr_adam = trial.suggest_float("lr-adam", 1e-5, 1e-3, log=True)
-            weight_decay_adam = trial.suggest_float("wd-adam", 1e-5, 1, log=True)
-            optimizer = AdamW(model.parameters(), lr=lr_adam, weight_decay=weight_decay_adam)
+        # SophiaG          
+        lr_sophia = trial.suggest_float("lr-sophia", 1e-6, 1e-3, log=True)
+        rho = trial.suggest_float("rho", 0, 0.5) 
+        k = trial.suggest_int("k", 5, 20, step=5)  
+        optimizer = Sophia(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho, k=k)
              
         for epoch in range(args.epochs):
-            #train on semantic textual similarity (sts)
-            model.train()
-            num_batches = 0        
-            
-            for batch in tqdm(sts_train_dataloader, desc=f'train-sts-{epoch}', disable=TQDM_DISABLE):#
-                
-                b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
-                                                            batch['token_ids_2'], batch['attention_mask_2'],
-                                                            batch['labels'])
-                
-                b_ids1 = b_ids1.to(device)
-                b_mask1 = b_mask1.to(device)
-                b_ids2 = b_ids2.to(device)
-                b_mask2 = b_mask2.to(device)
-                b_labels = b_labels.to(device)
-
-                optimizer.zero_grad(set_to_none=True)
-                logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
-                
-                loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
-                loss.backward()
-                optimizer.step()
-
-                num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if optimizer_name == "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)
-                    
-                if num_batches >= n_iter:
-                    break
-
-            # train on sentiment analysis sst        
-            model.train()
-            num_batches = 0
-            for batch in tqdm(sst_train_dataloader, desc=f'train-sst-{epoch}', disable=TQDM_DISABLE):
-                
-                b_ids, b_mask, b_labels = (batch['token_ids'],
-                                        batch['attention_mask'], batch['labels'])
-
-                b_ids = b_ids.to(device)
-                b_mask = b_mask.to(device)
-                b_labels = b_labels.to(device)
-
-                optimizer.zero_grad()
-                logits = model(b_ids, b_mask, task_id=0)     
-                
-                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum')
-                loss.backward()
-                optimizer.step()
-
-                num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if optimizer_name == "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad()
-                    
-                if num_batches >= n_iter:
-                    break
             
             # train on paraphrasing Quora Question Pairs qqp       
             model.train()
             num_batches = 0
+            loss_para_train =0
 
             for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
                 
@@ -187,30 +118,79 @@ def train_multitask(args):
                 optimizer.zero_grad()
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
                     
-                loss = F.cross_entropy(logits, b_labels.view(-1).float(), reduction='mean')
-                loss.backward()
+                loss_para = F.cross_entropy(logits, b_labels.view(-1).float(), reduction='mean')
+                loss_para.backward()
                 optimizer.step()
 
+                loss_para_train += loss_para.item()
                 num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if optimizer_name == "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)    
                     
                 if num_batches >= n_iter:
                     break     
+                
+            loss_para_train = loss_para_train / num_batches
+                
+            #train on semantic textual similarity (sts)
+            model.train()
+            num_batches = 0   
+            loss_sts_train = 0     
             
-            # evaluation                
-            (paraphrase_accuracy, sts_corr, sentiment_accuracy)= optuna_eval(sst_dev_dataloader,
-                                                    para_dev_dataloader,
-                                                    sts_dev_dataloader,
-                                                    model, device, n_iter) 
-            if np.isnan(sts_corr):
-                sts_corr = 0
-            epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3 
-            trial.report(epoch_acc, epoch)
+            for batch in tqdm(sts_train_dataloader, desc=f'train-sts-{epoch}', disable=TQDM_DISABLE):#
+                
+                b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
+                                                            batch['token_ids_2'], batch['attention_mask_2'],
+                                                            batch['labels'])
+                
+                b_ids1 = b_ids1.to(device)
+                b_mask1 = b_mask1.to(device)
+                b_ids2 = b_ids2.to(device)
+                b_mask2 = b_mask2.to(device)
+                b_labels = b_labels.to(device)
+
+                optimizer.zero_grad(set_to_none=True)
+                logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
+                
+                loss_sts = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
+                loss_sts.backward()
+                optimizer.step()
+
+                loss_sts_train += loss_sts.item()
+                num_batches += 1
+                    
+                if num_batches >= n_iter:
+                    break
+            loss_sts_train = loss_sts_train / num_batches
+
+            # train on sentiment analysis sst        
+            model.train()
+            num_batches = 0
+            loss_sst_train = 0
+            
+            for batch in tqdm(sst_train_dataloader, desc=f'train-sst-{epoch}', disable=TQDM_DISABLE):
+                
+                b_ids, b_mask, b_labels = (batch['token_ids'],
+                                        batch['attention_mask'], batch['labels'])
+
+                b_ids = b_ids.to(device)
+                b_mask = b_mask.to(device)
+                b_labels = b_labels.to(device)
+
+                optimizer.zero_grad()
+                logits = model(b_ids, b_mask, task_id=0)     
+                
+                loss_sst = F.cross_entropy(logits, b_labels.view(-1), reduction='sum')
+                loss_sst.backward()
+                optimizer.step()
+
+                loss_sst_train += loss_sst.item()
+                num_batches += 1
+                    
+                if num_batches >= n_iter:
+                    break
+            loss_sst_train = loss_sst_train / num_batches            
+            
+            loss_epoch = loss_para_train + loss_sts_train + loss_sst_train
+            trial.report(loss_epoch, epoch)
             if trial.should_prune():
                 pruned_trial = True
                 break
@@ -218,7 +198,7 @@ def train_multitask(args):
         if pruned_trial:
             study.tell(trial, state=optuna.trial.TrialState.PRUNED)
         else:       
-            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)       
+            study.tell(trial, loss_epoch, state=TrialState.COMPLETE)       
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -262,7 +242,7 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    study = optuna.create_study(direction="maximize", study_name="Optimizer",
+    study = optuna.create_study(direction="minimize", study_name="Sophia",
                                 pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
                                                                         max_resource=3))
     train_multitask(args)
@@ -279,24 +259,24 @@ if __name__ == "__main__":
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
         
-    with open('optuna/optimizer.txt', 'w') as f:
+    with open('optuna/sophia.txt', 'w') as f:
         f.write('\n'.join(lines))          
     
     fig = plot_optimization_history(study)
-    plt.savefig("optuna/optimizer-history.png")
+    plt.savefig("optuna/sophia-history.png")
     fig = plot_intermediate_values(study)
-    plt.savefig("optuna/optimizer-intermediate.png")
+    plt.savefig("optuna/sophia-intermediate.png")
     fig = plot_parallel_coordinate(study)
-    plt.savefig("optuna/optimizer-parallel.png")
+    plt.savefig("optuna/sophia-parallel.png")
     fig = plot_contour(study)
-    plt.savefig("optuna/optimizer-contour.png")
+    plt.savefig("optuna/sophia-contour.png")
     fig = plot_slice(study)
-    plt.savefig("optuna/optimizer-slice.png")
+    plt.savefig("optuna/sophia-slice.png")
     fig = plot_param_importances(study)
-    plt.savefig("optuna/optimizer-parameter.png")
+    plt.savefig("optuna/sophia-parameter.png")
     fig = plot_edf(study)
-    plt.savefig("optuna/optimizer-edf.png")
+    plt.savefig("optuna/sophia-edf.png")
     fig = plot_rank(study)
-    plt.savefig("optuna/optimizer-rank.png")
+    plt.savefig("optuna/sophia-rank.png")
     fig = plot_timeline(study)
-    plt.savefig("optuna/optimizer-timeline.png")
+    plt.savefig("optuna/sophia-timeline.png")
