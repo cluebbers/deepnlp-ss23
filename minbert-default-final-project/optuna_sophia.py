@@ -20,7 +20,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 from evaluation import optuna_eval
 from models import *
 # SOPHIA
-from optimizer import Sophia
+from optimizer import SophiaG
 # SMART regularization
 import smart_utils as smart
 # Optuna
@@ -94,7 +94,7 @@ def train_multitask(args):
         lr_sophia = trial.suggest_float("lr-sophia", 1e-6, 1e-3, log=True)
         rho = trial.suggest_float("rho", 0, 0.5) 
         k = trial.suggest_int("k", 5, 20, step=5)  
-        optimizer = Sophia(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho, k=k)
+        optimizer = SophiaG(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho)
              
         for epoch in range(args.epochs):
             
@@ -124,6 +124,12 @@ def train_multitask(args):
 
                 loss_para_train += loss_para.item()
                 num_batches += 1
+                
+                # SOPHIA
+                # update hession EMA
+                if num_batches % k == k - 1:                  
+                    optimizer.update_hessian()
+                    optimizer.zero_grad(set_to_none=True)    
                     
                 if num_batches >= n_iter:
                     break     
@@ -156,6 +162,12 @@ def train_multitask(args):
 
                 loss_sts_train += loss_sts.item()
                 num_batches += 1
+                
+                # SOPHIA
+                # update hession EMA
+                if num_batches % k == k - 1:                  
+                    optimizer.update_hessian()
+                    optimizer.zero_grad(set_to_none=True)
                     
                 if num_batches >= n_iter:
                     break
@@ -184,6 +196,12 @@ def train_multitask(args):
 
                 loss_sst_train += loss_sst.item()
                 num_batches += 1
+                
+                # SOPHIA
+                # update hession EMA
+                if "SophiaG" and num_batches % k == k - 1:                  
+                    optimizer.update_hessian()
+                    optimizer.zero_grad()
                     
                 if num_batches >= n_iter:
                     break
