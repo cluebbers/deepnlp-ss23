@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
 from bert import BertModel
-from optimizer import AdamW
+from optimizer import *
 from tqdm import tqdm
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
@@ -24,8 +24,7 @@ from evaluation import test_model_multitask
 from evaluation import smart_eval
 # tensorboard
 from torch.utils.tensorboard import SummaryWriter
-# SOPHIA
-from optimizer import SophiaG
+
 # SMART regularization
 from smart_perturbation import SmartPerturbation
 import smart_utils as smart
@@ -76,6 +75,7 @@ def train_multitask(args):
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
+              'hidden_dropout_prob2': args.hidden_dropout_prob2,
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
@@ -92,12 +92,11 @@ def train_multitask(args):
     model = model.to(device)
     
     # optimizer choice 
-    # AdamW or SophiaG
     lr = args.lr
     weight_decay = args.weight_decay
 
     if args.optimizer == "sophiag":
-        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
+        optimizer = SophiaG2(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = 0.01, weight_decay=weight_decay)
         #how often to update the hessian?
         k = args.k_for_sophia
     else:
@@ -111,7 +110,7 @@ def train_multitask(args):
         smart_perturbation = SmartPerturbation(loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
     
     # tensorboard writer
-    writer = SummaryWriter(comment = args.logdir)
+    writer = SummaryWriter(comment = args.comment)
 
     # profiler
     profiler = args.profiler
@@ -190,9 +189,15 @@ def train_multitask(args):
             
             # SOPHIA
             # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
-                optimizer.zero_grad(set_to_none=True)
+            # if args.optimizer == "sophiag" and num_batches % k == k - 1:  
+            #     logits, _ = model(b_ids1, 0, b_ids2, 0, task_id=2)
+            #     samp_dist = torch.distributions.Categorical(logits=logits)
+            #     y_sample = samp_dist.sample()
+            #     loss_sampled = F.cross_entropy(logits.view(-1, logits.size(-1)), y_sample.view(-1), ignore_index=-1)
+            #     loss_sampled.backward()
+            #     optimizer.update_hessian()
+            #     optimizer.zero_grad(set_to_none=True)
+            #     model.zero_grad()                
             
             # profiling step
             if profiler:
@@ -258,9 +263,15 @@ def train_multitask(args):
             
             # SOPHIA
             # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
-                optimizer.zero_grad()
+            # if args.optimizer == "sophiag" and num_batches % k == k - 1:  
+            #     logits, _ = model(b_ids1, 0, task_id=0)
+            #     samp_dist = torch.distributions.Categorical(logits=logits)
+            #     y_sample = samp_dist.sample()
+            #     loss_sampled = F.cross_entropy(logits.view(-1, logits.size(-1)), y_sample.view(-1), ignore_index=-1)
+            #     loss_sampled.backward()
+            #     optimizer.update_hessian()
+            #     optimizer.zero_grad(set_to_none=True)
+            #     model.zero_grad()           
                 
             # profiling step
             if profiler:
@@ -342,9 +353,15 @@ def train_multitask(args):
             
             # SOPHIA
             # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:                  
-                optimizer.update_hessian()
-                optimizer.zero_grad(set_to_none=True)
+            # if args.optimizer == "sophiag" and num_batches % k == k - 1:  
+            #     logits, _ = model(b_ids1, 0, b_ids2, 0, task_id=1)
+            #     samp_dist = torch.distributions.Categorical(logits=logits)
+            #     y_sample = samp_dist.sample()
+            #     loss_sampled = F.cross_entropy(logits.view(-1, logits.size(-1)), y_sample.view(-1), ignore_index=-1)
+            #     loss_sampled.backward()
+            #     optimizer.update_hessian()
+            #     optimizer.zero_grad(set_to_none=True)
+            #     model.zero_grad()           
             
             # profiling step
             if profiler:
@@ -522,11 +539,12 @@ def get_args():
     parser.add_argument("--num_batches_sts", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
     
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
+    parser.add_argument("--hidden_dropout_prob2", type=float, default=None)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
     parser.add_argument("--local_files_only", action='store_true', default = True),
     # optimizer
-    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="sophiag")
+    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw")
     parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)    
     # tensorboard    

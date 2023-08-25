@@ -158,9 +158,12 @@ class SharedMultitaskBERT(nn.Module):
 
         self.hidden_size = BERT_HIDDEN_SIZE
         self.num_labels = N_SENTIMENT_CLASSES
+        self.dropout2 = config.hidden_dropout_prob2
         
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        if self.dropout2 is not None:
+            self.dropout2 = torch.nn.Dropout(config.hidden_dropout_prob2)
         
         # linear sentiment classifier
         self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
@@ -191,7 +194,10 @@ class SharedMultitaskBERT(nn.Module):
             embed_2 = self.bert(input_ids_2, attention_mask_2)['pooler_output'] if input_ids_2 is not None else None
             
         embed_1 = self.dropout(embed_1)
-        embed_2 = self.dropout(embed_2) if input_ids_2 is not None else None
+        if self.dropout2 is not None:
+            embed_2 = self.dropout2(embed_2) if input_ids_2 is not None else None
+        else:
+            embed_2 = self.dropout(embed_2) if input_ids_2 is not None else None
         
         # return embeddings for smart or proceed with logits
         if task_na == 1:
@@ -231,9 +237,12 @@ class SmartMultitaskBERT(nn.Module):
 
         self.hidden_size = BERT_HIDDEN_SIZE
         self.num_labels = N_SENTIMENT_CLASSES
+        self.dropout2 = config.hidden_dropout_prob2
         
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        if self.dropout2 is not None:
+            self.dropout2 = torch.nn.Dropout(config.hidden_dropout_prob2)
         
         # linear sentiment classifier
         self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
@@ -264,7 +273,10 @@ class SmartMultitaskBERT(nn.Module):
             embed_2 = self.bert(input_ids_2, attention_mask_2)['pooler_output'] if input_ids_2 is not None else None
             
         embed_1 = self.dropout(embed_1)
-        embed_2 = self.dropout(embed_2) if input_ids_2 is not None else None
+        if self.dropout2 is not None:
+            embed_2 = self.dropout2(embed_2) if input_ids_2 is not None else None
+        else:
+            embed_2 = self.dropout(embed_2) if input_ids_2 is not None else None
         
         if task_na == 1:
             return embed_1, embed_2

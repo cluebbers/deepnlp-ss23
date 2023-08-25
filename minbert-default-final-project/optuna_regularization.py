@@ -18,8 +18,9 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 
 # CLL import multitask evaluation
 from evaluation import optuna_eval
+from models import *
 # SOPHIA
-from optimizer_sophia import SophiaG
+from optimizer import SophiaG
 import smart_utils as smart
 # Optuna
 import logging
@@ -77,8 +78,10 @@ def train_multitask(args):
         
         # Init model
         hidden_dropout_prob = trial.suggest_float("hidden_dropout_prob", 0, 1)
+        hidden_dropout_prob2 = trial.suggest_float("hidden_dropout_prob", 0, 1)
     
         config = {'hidden_dropout_prob': hidden_dropout_prob,
+                  'hidden_dropout_prob2': hidden_dropout_prob2,
                 'num_labels': num_labels,
                 'hidden_size': 768,
                 'data_dir': '.',
@@ -88,15 +91,13 @@ def train_multitask(args):
         n_iter= len(sst_train_dataloader)
         config = SimpleNamespace(**config)
 
-        model = smart.SmartMultitaskBERT(config)
+        model = SmartMultitaskBERT(config)
         model = model.to(device)     
         
         # SophiaG         
-        lr_sophia = 6e-4
-        weight_decay_sophia = trial.suggest_float("wd_sophia", 1e-5, 1, log=True)
-        rho = 0.25
-        k = 10
-        optimizer = SophiaG(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay_sophia)
+        lr = 1e-5
+        weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=True)
+        optimizer = AdamW(model.parameters(), lr=lr, betas=(0.965, 0.99), weight_decay=weight_decay)
 
         for epoch in range(args.epochs):
             #train on semantic textual similarity (sts)
@@ -119,17 +120,11 @@ def train_multitask(args):
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
                 
-                loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
+                loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
                 loss.backward()
                 optimizer.step()
 
                 num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)
                     
                 if num_batches >= n_iter:
                     break
@@ -150,17 +145,11 @@ def train_multitask(args):
                 optimizer.zero_grad()
                 logits = model(b_ids, b_mask, task_id=0)     
                 
-                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='sum')
+                loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
                 loss.backward()
                 optimizer.step()
 
                 num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad()
                     
                 if num_batches >= n_iter:
                     break
@@ -189,12 +178,6 @@ def train_multitask(args):
                 optimizer.step()
 
                 num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)    
                     
                 if num_batches >= n_iter:
                     break     
