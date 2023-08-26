@@ -18,8 +18,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 
 # CLL import multitask evaluation
 from evaluation import optuna_eval
-# SOPHIA
-from optimizer_sophia import SophiaG
+from models import *
 # SMART regularization
 from smart_perturbation import SmartPerturbation
 import smart_utils as smart
@@ -81,7 +80,7 @@ def train_multitask(args):
     n_iter= len(sst_train_dataloader)
     config = SimpleNamespace(**config)
 
-    model = smart.SmartMultitaskBERT(config)
+    model = SmartMultitaskBERT(config)
     model = model.to(device)
     
     # OPTUNA
@@ -105,12 +104,10 @@ def train_multitask(args):
                                                    norm_p=norm_p,
                                                    loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
 
-        optimizer_name = "SophiaG"
-        lr = 1e-4
+        optimizer_name = "adamw"
+        lr = 1e-5
         weight_decay = 1e-2
-        rho = 3e-1
-        k = 10
-        optimizer = SophiaG(model.parameters(), lr=lr, betas=(0.965, 0.99), rho = rho, weight_decay=weight_decay)
+        optimizer = AdamW(model.parameters(), lr=lr, betas=(0.965, 0.99),weight_decay=weight_decay)
 
         for epoch in range(args.epochs):
             #train on semantic textual similarity (sts)
@@ -155,12 +152,6 @@ def train_multitask(args):
 
                 train_loss += loss.item()
                 num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if optimizer_name == "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)
                     
                 if num_batches >= n_iter:
                     break
@@ -203,12 +194,6 @@ def train_multitask(args):
 
                 train_loss += loss.item()
                 num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if optimizer_name == "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad()
                     
                 if num_batches >= n_iter:
                     break
@@ -256,13 +241,7 @@ def train_multitask(args):
                 optimizer.step()
 
                 train_loss += loss.item()
-                num_batches += 1
-                
-                # SOPHIA
-                # update hession EMA
-                if optimizer_name == "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)    
+                num_batches += 1  
                     
                 if num_batches >= n_iter:
                     break     
