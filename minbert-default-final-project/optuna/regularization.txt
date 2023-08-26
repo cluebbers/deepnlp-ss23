@@ -1,4 +1,4 @@
 Number of finished trials: 100
-Number of pruned trials: 45
-Number of complete trials: 55
-Best value: 0.30051236082354277 (params: {'hidden_dropout_prob': 0.772208544480287, 'wd_sophia': 4.94634287988293e-05})
+Number of pruned trials: 36
+Number of complete trials: 64
+Best value: 0.445966456327789 (params: {'hidden_dropout_prob': 0.3180160684208426, 'weight_decay': 0.002759323315293032})
