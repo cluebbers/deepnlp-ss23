@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
 from bert import BertModel
-from torch.optim import AdamW
 from tqdm import tqdm
 
 from datasets import SentenceClassificationDataset, SentencePairDataset, \
@@ -20,7 +19,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 from evaluation import optuna_eval
 from models import *
 # SOPHIA
-from optimizer import SophiaG
+from optimizer import *
 # SMART regularization
 import smart_utils as smart
 # Optuna
@@ -37,7 +36,7 @@ from optuna.visualization.matplotlib  import plot_rank
 from optuna.visualization.matplotlib  import plot_slice
 from optuna.visualization.matplotlib  import plot_timeline
 
-TQDM_DISABLE=False
+TQDM_DISABLE=True
 
 
 def train_multitask(args):       
@@ -72,6 +71,7 @@ def train_multitask(args):
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
+              'hidden_dropout_prob2': None,
             'num_labels': num_labels,
             'hidden_size': 768,
             'data_dir': '.',
@@ -91,10 +91,20 @@ def train_multitask(args):
         pruned_trial = False
         
         # SophiaG          
-        lr_sophia = trial.suggest_float("lr-sophia", 1e-6, 1e-3, log=True)
-        rho = trial.suggest_float("rho", 0, 0.5) 
-        k = trial.suggest_int("k", 5, 20, step=5)  
-        optimizer = SophiaG(model.parameters(), lr=lr_sophia, betas=(0.965, 0.99), rho = rho)
+        lr_para = trial.suggest_float("lr-para", 1e-5, 1e-3, log=True)
+        lr_sst = trial.suggest_float("lr-sst", 1e-5, 1e-3, log=True)
+        lr_sts = trial.suggest_float("lr-sts", 1e-5, 1e-3, log=True)
+        rho_para = trial.suggest_float("rho_para", 0.03, 0.05)
+        rho_sst = trial.suggest_float("rho_sst", 0.03, 0.05)
+        rho_sts = trial.suggest_float("rho_sts", 0.03, 0.05)
+        weight_decay_para = trial.suggest_float("weight_decay_para", 0, 0.5)
+        weight_decay_sst = trial.suggest_float("weight_decay_sst", 0, 0.5)
+        weight_decay_sts = trial.suggest_float("weight_decay_sts", 0, 0.5)
+        k=10
+
+        optimizer_para = SophiaG(model.parameters(), lr=lr_para, rho =rho_para, betas=(0.965, 0.99), weight_decay = weight_decay_para)
+        optimizer_sst = SophiaG(model.parameters(), lr=lr_sst, rho =rho_sst, betas=(0.965, 0.99), weight_decay = weight_decay_sst)
+        optimizer_sts = SophiaG(model.parameters(), lr=lr_sts, rho =rho_sts, betas=(0.965, 0.99), weight_decay = weight_decay_sts)
              
         for epoch in range(args.epochs):
             
@@ -115,12 +125,12 @@ def train_multitask(args):
                 b_mask2 = b_mask2.to(device)
                 b_labels = b_labels.to(device)
 
-                optimizer.zero_grad()
+                optimizer_para.zero_grad()
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
                     
                 loss_para = F.cross_entropy(logits, b_labels.view(-1).float(), reduction='mean')
                 loss_para.backward()
-                optimizer.step()
+                optimizer_para.step()
 
                 loss_para_train += loss_para.item()
                 num_batches += 1
@@ -128,8 +138,8 @@ def train_multitask(args):
                 # SOPHIA
                 # update hession EMA
                 if num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)    
+                    optimizer_para.update_hessian()
+                    optimizer_para.zero_grad(set_to_none=True)    
                     
                 if num_batches >= n_iter:
                     break     
@@ -153,12 +163,12 @@ def train_multitask(args):
                 b_mask2 = b_mask2.to(device)
                 b_labels = b_labels.to(device)
 
-                optimizer.zero_grad(set_to_none=True)
+                optimizer_sts.zero_grad(set_to_none=True)
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
                 
                 loss_sts = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
                 loss_sts.backward()
-                optimizer.step()
+                optimizer_sts.step()
 
                 loss_sts_train += loss_sts.item()
                 num_batches += 1
@@ -166,8 +176,8 @@ def train_multitask(args):
                 # SOPHIA
                 # update hession EMA
                 if num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad(set_to_none=True)
+                    optimizer_sts.update_hessian()
+                    optimizer_sts.zero_grad(set_to_none=True)
                     
                 if num_batches >= n_iter:
                     break
@@ -187,12 +197,12 @@ def train_multitask(args):
                 b_mask = b_mask.to(device)
                 b_labels = b_labels.to(device)
 
-                optimizer.zero_grad()
+                optimizer_sst.zero_grad()
                 logits = model(b_ids, b_mask, task_id=0)     
                 
                 loss_sst = F.cross_entropy(logits, b_labels.view(-1), reduction='sum')
                 loss_sst.backward()
-                optimizer.step()
+                optimizer_sst.step()
 
                 loss_sst_train += loss_sst.item()
                 num_batches += 1
@@ -200,8 +210,8 @@ def train_multitask(args):
                 # SOPHIA
                 # update hession EMA
                 if "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer.update_hessian()
-                    optimizer.zero_grad()
+                    optimizer_sst.update_hessian()
+                    optimizer_sst.zero_grad()
                     
                 if num_batches >= n_iter:
                     break
