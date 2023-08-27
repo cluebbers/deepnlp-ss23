@@ -241,6 +241,10 @@ class SmartMultitaskBERT(nn.Module):
         
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
+        self.dropout_para = torch.nn.Dropout(config.hidden_dropout_prob_para)
+        self.dropout_sst = torch.nn.Dropout(config.hidden_dropout_prob_sst)
+        self.dropout_sts = torch.nn.Dropout(config.hidden_dropout_prob_sts)
+        
         if self.dropout2 is not None:
             self.dropout2 = torch.nn.Dropout(config.hidden_dropout_prob2)
         
@@ -297,6 +301,7 @@ class SmartMultitaskBERT(nn.Module):
         Thus, your output should contain 5 logits for each sentence.
         '''          
         # and then projecting it using a linear layer.
+        embed_1 = self.droput_sst(embed_1)
         sentiment_logit = self.sentiment_classifier(embed_1)
         
         return sentiment_logit
@@ -315,6 +320,7 @@ class SmartMultitaskBERT(nn.Module):
         
         paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
         
+        paraphrase_logit = self.dropout_para(paraphrase_logit)
         return paraphrase_logit
 
     def predict_similarity(self, embed_1, embed_2):
@@ -329,6 +335,8 @@ class SmartMultitaskBERT(nn.Module):
         # /2 to get to [0, 1]
         # *5 to get [0, 5] like in the dataset
         #similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
+        embed_1 = self.dropout_sts(embed_1)
+        embed_2 = self.dropout_sts(embed_2)
         similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
         
         return similarity

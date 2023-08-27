@@ -46,49 +46,84 @@ def train_multitask(args):
     sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
     sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
     
-    # sst
-    sst_train_data = SentenceClassificationDataset(sst_train_data, args)
-    sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)    
-    sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=args.batch_size,
-                                    collate_fn=sst_train_data.collate_fn)
-    sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=sst_dev_data.collate_fn)
-
-    # paraphrasing
-    para_train_data = SentencePairDataset(para_train_data, args)
-    para_dev_data = SentencePairDataset(para_dev_data, args)    
-    para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=args.batch_size,
-                                    collate_fn=para_train_data.collate_fn)
-    para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=para_dev_data.collate_fn)
-    # similarity
-    sts_train_data = SentencePairDataset(sts_train_data, args)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args)    
-    sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
-                                    collate_fn=sts_train_data.collate_fn)
-    sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
-                                    collate_fn=sts_dev_data.collate_fn)   
-
-    # Init model
-    config = {'hidden_dropout_prob': args.hidden_dropout_prob,
-              'hidden_dropout_prob2': None,
-            'num_labels': num_labels,
-            'hidden_size': 768,
-            'data_dir': '.',
-            'option': args.option,
-            'local_files_only': args.local_files_only}
-    
-    n_iter= len(sst_train_dataloader)
-    config = SimpleNamespace(**config)
-
-    model = SmartMultitaskBERT(config)
-    model = model.to(device)
-    
     # OPTUNA
     for _ in tqdm(range(args.n_trials), disable = TQDM_DISABLE):
         # optimizer choice 
         trial = study.ask()
         pruned_trial = False
+    
+        # sst
+        if args.objective == "sst":
+            batch_size = trial.suggest_int("batch_size_sst", 1, 128, log=True)
+        else:
+            batch_size = args.batch_size
+            
+        sst_train_data = SentenceClassificationDataset(sst_train_data, args)
+        sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)    
+        sst_train_dataloader = DataLoader(sst_train_data, shuffle=True, batch_size=batch_size,
+                                        collate_fn=sst_train_data.collate_fn)
+        sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=batch_size,
+                                        collate_fn=sst_dev_data.collate_fn)
+    
+        # paraphrasing
+        if args.objective == "para":
+            batch_size = trial.suggest_int("batch_size_para", 1, 128, log=True)
+        else:
+            batch_size = args.batch_size
+            
+        para_train_data = SentencePairDataset(para_train_data, args)
+        para_dev_data = SentencePairDataset(para_dev_data, args)    
+        para_train_dataloader = DataLoader(para_train_data, shuffle=True, batch_size=batch_size,
+                                        collate_fn=para_train_data.collate_fn)
+        para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=batch_size,
+                                        collate_fn=para_dev_data.collate_fn)
+        # similarity
+        if args.objective == "sts":
+            batch_size = trial.suggest_int("batch_size_sts", 1, 128, log=True)
+        else:
+            batch_size = args.batch_size
+            
+        sts_train_data = SentencePairDataset(sts_train_data, args)
+        sts_dev_data = SentencePairDataset(sts_dev_data, args)    
+        sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=batch_size,
+                                        collate_fn=sts_train_data.collate_fn)
+        sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=batch_size,
+                                        collate_fn=sts_dev_data.collate_fn)   
+    
+        # Init model
+        if args.objective == "para": 
+            dropout_para = trial.suggest_float("dropout_para", 0.1, 0.6, log=True)
+        else: 
+            dropout_para = args.hidden_dropout_prob_para
+        
+        if args.objective == "sst": 
+            dropout_sst = trial.suggest_float("dropout_sst", 0.1, 0.6, log=True)
+        else: 
+            dropout_sst = args.hidden_dropout_prob_sst
+        
+        if args.objective == "sts": 
+            dropout_sts = trial.suggest_float("dropout_sts", 0.1, 0.6, log=True)
+        else: 
+            dropout_sts = args.hidden_dropout_prob_sts
+            
+        
+        config = {'hidden_dropout_prob': args.hidden_dropout_prob,
+                  'hidden_dropout_prob2': None,
+                  'hidden_dropout_prob_para': dropout_para,
+                  'hidden_dropout_prob_sst': dropout_sst,
+                  'hidden_dropout_prob_sts': dropout_sts,
+                'num_labels': num_labels,
+                'hidden_size': 768,
+                'data_dir': '.',
+                'option': args.option,
+                'local_files_only': args.local_files_only}
+        
+        n_iter= len(sst_train_dataloader)
+        config = SimpleNamespace(**config)
+    
+        model = SmartMultitaskBERT(config)
+        model = model.to(device)
+        
         
         # SophiaG 
         k=10
@@ -99,36 +134,43 @@ def train_multitask(args):
             rho_para = trial.suggest_float("rho_para", 0.03, 0.05)
             rho_sst = trial.suggest_float("rho_sst", 0.03, 0.05)
             rho_sts = trial.suggest_float("rho_sts", 0.03, 0.05)
-            weight_decay_para = trial.suggest_float("weight_decay_para", 0, 0.5)
-            weight_decay_sst = trial.suggest_float("weight_decay_sst", 0, 0.5)
-            weight_decay_sts = trial.suggest_float("weight_decay_sts", 0, 0.5)           
+            weight_decay_para = trial.suggest_float("weight_decay_para", 0.01, 0.5)
+            weight_decay_sst = trial.suggest_float("weight_decay_sst", 0.01, 0.5)
+            weight_decay_sts = trial.suggest_float("weight_decay_sts", 0.01, 0.5)           
             optimizer_para = SophiaG(model.parameters(), lr=lr_para, rho =rho_para, betas=(0.965, 0.99), weight_decay = weight_decay_para)
             optimizer_sst = SophiaG(model.parameters(), lr=lr_sst, betas=(0.965, 0.99), weight_decay = weight_decay_sst)
             optimizer_sts = SophiaG(model.parameters(), lr=lr_sts, betas=(0.965, 0.99), weight_decay = weight_decay_sts)
             
+            #default hyperparameters for lr, rho and weight_decay are from earlier hyperparameter optimization 
         elif args.objective =="para":
             lr_para = trial.suggest_float("lr-para", 1e-5, 1e-3, log=True)
-            rho_para = trial.suggest_float("rho_para", 0.03, 0.05)
-            weight_decay_para = trial.suggest_float("weight_decay_para", 0, 0.5)
-            optimizer_para = SophiaG(model.parameters(), lr=lr_para, rho =rho_para, betas=(0.965, 0.99), weight_decay = weight_decay_para)
-            optimizer_sst = SophiaG(model.parameters())
-            optimizer_sts = SophiaG(model.parameters())
+            rho_para = trial.suggest_float("rho_para", 0.01, 0.05)
+            weight_decay_para = trial.suggest_float("weight_decay_para", 0.01, 0.5)
+            beta1 = trial.suggest_float("beta1", 0.9,1)
+            beta2 = trial.suggest_float("beta1", 0.9,1)
+            optimizer_para = SophiaG(model.parameters(), lr=lr_para, rho =rho_para, betas=(beta1, beta2), weight_decay = weight_decay_para)
+            optimizer_sst = SophiaG(model.parameters(),lr= 2.6e-5, rho= 0.04, weight_decay=0.2)
+            optimizer_sts = SophiaG(model.parameters(),lr =4.2e-4, rho=0.03, weight_decay=0.13)
         
         elif args.objective =="sst":
             lr_sst = trial.suggest_float("lr-sst", 1e-5, 1e-3, log=True)
-            rho_sst = trial.suggest_float("rho_sst", 0.03, 0.05)
-            weight_decay_sst = trial.suggest_float("weight_decay_sst", 0, 0.5)
-            optimizer_para = SophiaG(model.parameters())
-            optimizer_sst = SophiaG(model.parameters(), lr=lr_sst, rho =rho_sst, betas=(0.965, 0.99), weight_decay = weight_decay_sst)
-            optimizer_sts = SophiaG(model.parameters())
+            rho_sst = trial.suggest_float("rho_sst", 0.01, 0.05)
+            weight_decay_sst = trial.suggest_float("weight_decay_sst", 0.01, 0.5)
+            beta1 = trial.suggest_float("beta1", 0.9,1)
+            beta2 = trial.suggest_float("beta1", 0.9,1)
+            optimizer_para = SophiaG(model.parameters(), lr = 3.4e-5,rho=0.04,weight_decay=0.12)
+            optimizer_sst = SophiaG(model.parameters(), lr=lr_sst, rho =rho_sst, betas=(beta1, beta2), weight_decay = weight_decay_sst)
+            optimizer_sts = SophiaG(model.parameters(), lr =4.2e-4, rho=0.03, weight_decay=0.13)
             
         elif args.objective =="sts":
             lr_sts = trial.suggest_float("lr-sts", 1e-5, 1e-3, log=True)
-            rho_sts = trial.suggest_float("rho_sts", 0.03, 0.05)
-            weight_decay_sts = trial.suggest_float("weight_decay_sts", 0, 0.5)            
-            optimizer_para = SophiaG(model.parameters())
-            optimizer_sst = SophiaG(model.parameters())
-            optimizer_sts = SophiaG(model.parameters(), lr=lr_sts, rho =rho_sts, betas=(0.965, 0.99), weight_decay = weight_decay_sts)
+            rho_sts = trial.suggest_float("rho_sts", 0.01, 0.05)
+            weight_decay_sts = trial.suggest_float("weight_decay_sts", 0.01, 0.5)  
+            beta1 = trial.suggest_float("beta1", 0.9,1)
+            beta2 = trial.suggest_float("beta1", 0.9,1)
+            optimizer_para = SophiaG(model.parameters(),lr = 3.4e-5,rho=0.04,weight_decay=0.12)
+            optimizer_sst = SophiaG(model.parameters(),lr= 2.6e-5, rho= 0.04, weight_decay=0.2)
+            optimizer_sts = SophiaG(model.parameters(), lr=lr_sts, rho =rho_sts, betas=(beta1,beta2), weight_decay = weight_decay_sts) #betas=(0.965, 0.99)
              
         for epoch in range(args.epochs):
             
@@ -152,7 +194,7 @@ def train_multitask(args):
                 optimizer_para.zero_grad()
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
                     
-                loss_para = F.cross_entropy(logits, b_labels.view(-1).float(), reduction='mean')
+                loss_para = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
                 loss_para.backward()
                 optimizer_para.step()
 
@@ -165,8 +207,8 @@ def train_multitask(args):
                     optimizer_para.update_hessian()
                     optimizer_para.zero_grad(set_to_none=True)    
                     
-                if num_batches >= n_iter:
-                    break     
+                #if num_batches >= n_iter:
+                    #break     
                 
             loss_para_train = loss_para_train / num_batches
                 
@@ -203,8 +245,8 @@ def train_multitask(args):
                     optimizer_sts.update_hessian()
                     optimizer_sts.zero_grad(set_to_none=True)
                     
-                if num_batches >= n_iter:
-                    break
+                #if num_batches >= n_iter:
+                    #break
             loss_sts_train = loss_sts_train / num_batches
 
             # train on sentiment analysis sst        
@@ -237,10 +279,19 @@ def train_multitask(args):
                     optimizer_sst.update_hessian()
                     optimizer_sst.zero_grad()
                     
-                if num_batches >= n_iter:
-                    break
-            loss_sst_train = loss_sst_train / num_batches            
+                #if num_batches >= n_iter:
+                    #break
+            loss_sst_train = loss_sst_train / num_batches  
             
+            # calculate accuracy on the dev sets
+            (paraphrase_accuracy, sts_corr, sentiment_accuracy)= optuna_eval(sst_dev_dataloader,
+                                                    para_dev_dataloader,
+                                                    sts_dev_dataloader,
+                                                    model, device, n_iter) 
+            if np.isnan(sts_corr):
+                sts_corr = 0
+
+            '''
             if args.objective == "all":
                 loss_epoch = loss_para_train + loss_sts_train + loss_sst_train
                 trial.report(loss_epoch, epoch)
@@ -274,7 +325,51 @@ def train_multitask(args):
             study.tell(trial, loss_sst_train, state=TrialState.COMPLETE)  
         elif args.objective == "sts":       
             study.tell(trial, loss_sts_train, state=TrialState.COMPLETE)  
+            '''
+            if args.objective == "all":
+                   epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3 
+                   trial.report(epoch_acc, epoch)
+                   if trial.should_prune():
+                       pruned_trial = True
+                       break
+            elif args.objective == "para":
+                #focus is to max para_acc but the performance on the other datasets shouldn't be hurt too bad
+                epoch_acc = (3*paraphrase_accuracy + sts_corr + sentiment_accuracy) / 4
+                trial.report(epoch_acc, epoch)
+                if trial.should_prune():
+                   pruned_trial = True
+                   break            
+            elif args.objective == "sst":
+               #focus is to max sst_acc but the performance on the other datasets shouldn't be hurt too bad
+               epoch_acc = (paraphrase_accuracy + sts_corr + 3*sentiment_accuracy) / 4
+               trial.report(epoch_acc, epoch)
+               if trial.should_prune():
+                   pruned_trial = True
+                   break                      
+            elif args.objective == "sts":
+               #focus is to max sts_corr but the performance on the other datasets shouldn't be hurt too bad
+               epoch_acc = (paraphrase_accuracy + 3*sts_corr + sentiment_accuracy) / 4
+               trial.report(epoch_acc, epoch)
+               if trial.should_prune():
+                   pruned_trial = True
+                   break          
+           
+        if pruned_trial:
+           study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+        elif args.objective == "all":   
+           epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3   
+           study.tell(trial, epoch_acc, state=TrialState.COMPLETE)       
+        elif args.objective == "para": 
+            epoch_acc = (3*paraphrase_accuracy + sts_corr + sentiment_accuracy) / 4
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)  
+        elif args.objective == "sst":  
+            epoch_acc = (paraphrase_accuracy + sts_corr + 3*sentiment_accuracy) / 4
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)  
+        elif args.objective == "sts":  
+            epoch_acc = (paraphrase_accuracy + 3*sts_corr + sentiment_accuracy) / 4
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)
 
+            
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sst_train", type=str, default="data/ids-sst-train.csv")
@@ -307,10 +402,13 @@ def get_args():
 
     # hyper parameters
     parser.add_argument("--batch_size", help='sst: 64 can fit a 12GB GPU', type=int, default=10)    
-    parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
+    parser.add_argument("--hidden_dropout_prob", type=float, default=0)
+    parser.add_argument("--hidden_dropout_prob_para", type=float, default=0.3)
+    parser.add_argument("--hidden_dropout_prob_sst", type=float, default=0.3)
+    parser.add_argument("--hidden_dropout_prob_sts", type=float, default=0.3)
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
-    parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="all")
+    parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="sts")
     
     args = parser.parse_args()
     return args
@@ -318,7 +416,7 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    study = optuna.create_study(direction="minimize", study_name=f'Sophia-{args.objective}',
+    study = optuna.create_study(direction="maximize", study_name=f'Sophia-{args.objective}',
                                 pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
                                                                         max_resource=3))
     train_multitask(args)
