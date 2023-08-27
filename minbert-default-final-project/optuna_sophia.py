@@ -90,21 +90,45 @@ def train_multitask(args):
         trial = study.ask()
         pruned_trial = False
         
-        # SophiaG          
-        lr_para = trial.suggest_float("lr-para", 1e-5, 1e-3, log=True)
-        lr_sst = trial.suggest_float("lr-sst", 1e-5, 1e-3, log=True)
-        lr_sts = trial.suggest_float("lr-sts", 1e-5, 1e-3, log=True)
-        rho_para = trial.suggest_float("rho_para", 0.03, 0.05)
-        rho_sst = trial.suggest_float("rho_sst", 0.03, 0.05)
-        rho_sts = trial.suggest_float("rho_sts", 0.03, 0.05)
-        weight_decay_para = trial.suggest_float("weight_decay_para", 0, 0.5)
-        weight_decay_sst = trial.suggest_float("weight_decay_sst", 0, 0.5)
-        weight_decay_sts = trial.suggest_float("weight_decay_sts", 0, 0.5)
+        # SophiaG 
         k=10
-
-        optimizer_para = SophiaG(model.parameters(), lr=lr_para, rho =rho_para, betas=(0.965, 0.99), weight_decay = weight_decay_para)
-        optimizer_sst = SophiaG(model.parameters(), lr=lr_sst, rho =rho_sst, betas=(0.965, 0.99), weight_decay = weight_decay_sst)
-        optimizer_sts = SophiaG(model.parameters(), lr=lr_sts, rho =rho_sts, betas=(0.965, 0.99), weight_decay = weight_decay_sts)
+        if args.objective == "all":         
+            lr_para = trial.suggest_float("lr-para", 1e-5, 1e-3, log=True)
+            lr_sst = trial.suggest_float("lr-sst", 1e-5, 1e-3, log=True)
+            lr_sts = trial.suggest_float("lr-sts", 1e-5, 1e-3, log=True)
+            rho_para = trial.suggest_float("rho_para", 0.03, 0.05)
+            rho_sst = trial.suggest_float("rho_sst", 0.03, 0.05)
+            rho_sts = trial.suggest_float("rho_sts", 0.03, 0.05)
+            weight_decay_para = trial.suggest_float("weight_decay_para", 0, 0.5)
+            weight_decay_sst = trial.suggest_float("weight_decay_sst", 0, 0.5)
+            weight_decay_sts = trial.suggest_float("weight_decay_sts", 0, 0.5)           
+            optimizer_para = SophiaG(model.parameters(), lr=lr_para, rho =rho_para, betas=(0.965, 0.99), weight_decay = weight_decay_para)
+            optimizer_sst = SophiaG(model.parameters(), lr=lr_sst, betas=(0.965, 0.99), weight_decay = weight_decay_sst)
+            optimizer_sts = SophiaG(model.parameters(), lr=lr_sts, betas=(0.965, 0.99), weight_decay = weight_decay_sts)
+            
+        elif args.objective =="para":
+            lr_para = trial.suggest_float("lr-para", 1e-5, 1e-3, log=True)
+            rho_para = trial.suggest_float("rho_para", 0.03, 0.05)
+            weight_decay_para = trial.suggest_float("weight_decay_para", 0, 0.5)
+            optimizer_para = SophiaG(model.parameters(), lr=lr_para, rho =rho_para, betas=(0.965, 0.99), weight_decay = weight_decay_para)
+            optimizer_sst = SophiaG(model.parameters())
+            optimizer_sts = SophiaG(model.parameters())
+        
+        elif args.objective =="sst":
+            lr_sst = trial.suggest_float("lr-sst", 1e-5, 1e-3, log=True)
+            rho_sst = trial.suggest_float("rho_sst", 0.03, 0.05)
+            weight_decay_sst = trial.suggest_float("weight_decay_sst", 0, 0.5)
+            optimizer_para = SophiaG(model.parameters())
+            optimizer_sst = SophiaG(model.parameters(), lr=lr_sst, rho =rho_sst, betas=(0.965, 0.99), weight_decay = weight_decay_sst)
+            optimizer_sts = SophiaG(model.parameters())
+            
+        elif args.objective =="sts":
+            lr_sts = trial.suggest_float("lr-sts", 1e-5, 1e-3, log=True)
+            rho_sts = trial.suggest_float("rho_sts", 0.03, 0.05)
+            weight_decay_sts = trial.suggest_float("weight_decay_sts", 0, 0.5)            
+            optimizer_para = SophiaG(model.parameters())
+            optimizer_sst = SophiaG(model.parameters())
+            optimizer_sts = SophiaG(model.parameters(), lr=lr_sts, rho =rho_sts, betas=(0.965, 0.99), weight_decay = weight_decay_sts)
              
         for epoch in range(args.epochs):
             
@@ -166,7 +190,7 @@ def train_multitask(args):
                 optimizer_sts.zero_grad(set_to_none=True)
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
                 
-                loss_sts = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
+                loss_sts = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
                 loss_sts.backward()
                 optimizer_sts.step()
 
@@ -200,7 +224,7 @@ def train_multitask(args):
                 optimizer_sst.zero_grad()
                 logits = model(b_ids, b_mask, task_id=0)     
                 
-                loss_sst = F.cross_entropy(logits, b_labels.view(-1), reduction='sum')
+                loss_sst = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
                 loss_sst.backward()
                 optimizer_sst.step()
 
@@ -217,16 +241,38 @@ def train_multitask(args):
                     break
             loss_sst_train = loss_sst_train / num_batches            
             
-            loss_epoch = loss_para_train + loss_sts_train + loss_sst_train
-            trial.report(loss_epoch, epoch)
-            if trial.should_prune():
-                pruned_trial = True
-                break
+            if args.objective == "all":
+                loss_epoch = loss_para_train + loss_sts_train + loss_sst_train
+                trial.report(loss_epoch, epoch)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break
+            elif args.objective == "para":
+                trial.report(loss_para_train, epoch)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break            
+            elif args.objective == "sst":
+                trial.report(loss_sst_train, epoch)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break                      
+            elif args.objective == "sts":
+                trial.report(loss_sts_train, epoch)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break          
             
         if pruned_trial:
             study.tell(trial, state=optuna.trial.TrialState.PRUNED)
-        else:       
+        elif args.objective == "all":       
             study.tell(trial, loss_epoch, state=TrialState.COMPLETE)       
+        elif args.objective == "para":       
+            study.tell(trial, loss_epoch, state=TrialState.COMPLETE)  
+        elif args.objective == "sst":       
+            study.tell(trial, loss_epoch, state=TrialState.COMPLETE)  
+        elif args.objective == "sts":       
+            study.tell(trial, loss_epoch, state=TrialState.COMPLETE)  
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -263,6 +309,7 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
+    parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="all")
     
     args = parser.parse_args()
     return args
