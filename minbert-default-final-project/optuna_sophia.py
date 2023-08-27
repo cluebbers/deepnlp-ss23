@@ -408,7 +408,7 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob_sts", type=float, default=0.3)
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
-    parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="sts")
+    parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="all")
     
     args = parser.parse_args()
     return args
