@@ -328,7 +328,7 @@ class SmartMultitaskBERT(nn.Module):
         Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
         during evaluation, and handled as a logit by the appropriate loss function.
         '''    
-        # use cosine similarity as in
+        # use Cosine Similarity as in
         # Agirre et al "SEM 2013 shared task: Semantic Textual Similarity" section 4.2
         # cosine_similarity has ouput [-1, 1], so it needs rescaling
         # +1 to get to [0, 2]
