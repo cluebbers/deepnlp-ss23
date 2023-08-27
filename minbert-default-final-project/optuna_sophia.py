@@ -265,14 +265,15 @@ def train_multitask(args):
             
         if pruned_trial:
             study.tell(trial, state=optuna.trial.TrialState.PRUNED)
-        elif args.objective == "all":       
+        elif args.objective == "all":   
+            loss_epoch = loss_para_train + loss_sts_train + loss_sst_train    
             study.tell(trial, loss_epoch, state=TrialState.COMPLETE)       
         elif args.objective == "para":       
-            study.tell(trial, loss_epoch, state=TrialState.COMPLETE)  
+            study.tell(trial, loss_para_train, state=TrialState.COMPLETE)  
         elif args.objective == "sst":       
-            study.tell(trial, loss_epoch, state=TrialState.COMPLETE)  
+            study.tell(trial, loss_sst_train, state=TrialState.COMPLETE)  
         elif args.objective == "sts":       
-            study.tell(trial, loss_epoch, state=TrialState.COMPLETE)  
+            study.tell(trial, loss_sts_train, state=TrialState.COMPLETE)  
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -317,7 +318,7 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)  # fix the seed for reproducibility    
-    study = optuna.create_study(direction="minimize", study_name="Sophia",
+    study = optuna.create_study(direction="minimize", study_name=f'Sophia-{args.objective}',
                                 pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
                                                                         max_resource=3))
     train_multitask(args)
@@ -334,24 +335,24 @@ if __name__ == "__main__":
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
         
-    with open('optuna/sophia.txt', 'w') as f:
+    with open('optuna/sophia-'+ f'{args.objective}.txt', 'w') as f:
         f.write('\n'.join(lines))          
     
     fig = plot_optimization_history(study)
-    plt.savefig("optuna/sophia-history.png")
+    plt.savefig("optuna/sophia-" + f'{args.objective}-history.png')
     fig = plot_intermediate_values(study)
-    plt.savefig("optuna/sophia-intermediate.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-intermediate.png')
     fig = plot_parallel_coordinate(study)
-    plt.savefig("optuna/sophia-parallel.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-parallel.png')
     fig = plot_contour(study)
-    plt.savefig("optuna/sophia-contour.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-contour.png')
     fig = plot_slice(study)
-    plt.savefig("optuna/sophia-slice.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-slice.png')
     fig = plot_param_importances(study)
-    plt.savefig("optuna/sophia-parameter.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-parameter.png')
     fig = plot_edf(study)
-    plt.savefig("optuna/sophia-edf.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-edf.png')
     fig = plot_rank(study)
-    plt.savefig("optuna/sophia-rank.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-rank.png')
     fig = plot_timeline(study)
-    plt.savefig("optuna/sophia-timeline.png")
+    plt.savefig("optuna/sophia"+ f'{args.objective}-timeline.png')
