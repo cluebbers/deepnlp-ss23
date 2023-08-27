@@ -36,7 +36,7 @@ from optuna.visualization.matplotlib  import plot_rank
 from optuna.visualization.matplotlib  import plot_slice
 from optuna.visualization.matplotlib  import plot_timeline
 
-TQDM_DISABLE=False
+TQDM_DISABLE=True
 
 
 def train_multitask(args):       
@@ -71,6 +71,7 @@ def train_multitask(args):
 
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
+              'hidden_dropout_prob2': args.hidden_dropout_prob2,
             'num_labels': num_labels,
             'hidden_size': 768,
             'data_dir': '.',
@@ -104,15 +105,12 @@ def train_multitask(args):
                                                    norm_p=norm_p,
                                                    loss_map={0:smart_loss_sst, 1:smart_loss_qqp, 2:smart_loss_sts})
 
-        optimizer_name = "adamw"
         lr = 1e-5
-        weight_decay = 1e-2
-        optimizer = AdamW(model.parameters(), lr=lr, betas=(0.965, 0.99),weight_decay=weight_decay)
+        optimizer = AdamW(model.parameters(), lr=lr)
 
         for epoch in range(args.epochs):
             #train on semantic textual similarity (sts)
             model.train()
-            train_loss = 0
             num_batches = 0        
             
             for batch in tqdm(sts_train_dataloader, desc=f'train-sts-{epoch}', disable=TQDM_DISABLE):#
@@ -131,7 +129,7 @@ def train_multitask(args):
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
                 
                 # SMART
-                if args.smart:
+                if args.objective == "all" or args.objective == "sts":
                     adv_loss = smart_perturbation.forward(
                         model=model,
                         logits=logits,
@@ -144,23 +142,19 @@ def train_multitask(args):
                 else:
                     adv_loss = 0
                 
-                original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='sum')
+                original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
                 loss = original_loss + adv_loss
 
                 loss.backward()
                 optimizer.step()
 
-                train_loss += loss.item()
                 num_batches += 1
                     
                 if num_batches >= n_iter:
                     break
 
-            train_loss = train_loss / num_batches
-
             # train on sentiment analysis sst        
             model.train()
-            train_loss = 0
             num_batches = 0
             for batch in tqdm(sst_train_dataloader, desc=f'train-sst-{epoch}', disable=TQDM_DISABLE):
                 
@@ -175,7 +169,7 @@ def train_multitask(args):
                 logits = model(b_ids, b_mask, task_id=0)
                 
                 # SMART
-                if args.smart:
+                if args.objective == "all" or args.objective == "sst":
                     adv_loss = smart_perturbation.forward(
                         model=model,
                         logits=logits,
@@ -192,17 +186,13 @@ def train_multitask(args):
                 loss.backward()
                 optimizer.step()
 
-                train_loss += loss.item()
                 num_batches += 1
                     
                 if num_batches >= n_iter:
                     break
-
-            train_loss = train_loss / (num_batches)
             
             # train on paraphrasing Quora Question Pairs qqp       
             model.train()
-            train_loss = 0
             num_batches = 0
 
             for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
@@ -221,7 +211,7 @@ def train_multitask(args):
                 logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
                 
                 # SMART
-                if args.smart:
+                if args.objective == "all" or args.objective == "para":
                     adv_loss = smart_perturbation.forward(
                         model=model,
                         logits=logits,
@@ -240,13 +230,10 @@ def train_multitask(args):
                 loss.backward()
                 optimizer.step()
 
-                train_loss += loss.item()
                 num_batches += 1  
                     
                 if num_batches >= n_iter:
                     break     
-
-            train_loss = train_loss / num_batches
             
             # evaluation                
             (paraphrase_accuracy, sts_corr, sentiment_accuracy)= optuna_eval(sst_dev_dataloader,
@@ -255,15 +242,40 @@ def train_multitask(args):
                                                     model, device, n_iter) 
             if np.isnan(sts_corr):
                 sts_corr = 0
-            epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3 
-            trial.report(epoch_acc, epoch)
-            if trial.should_prune():
-                pruned_trial = True
-                break
+            
+            if args.objective == "all":
+                    epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3 
+                    trial.report(epoch_acc, epoch)
+                    if trial.should_prune():
+                        pruned_trial = True
+                        break
+            elif args.objective == "para":
+                trial.report(paraphrase_accuracy, epoch)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break            
+            elif args.objective == "sst":
+                trial.report(sentiment_accuracy, epoch)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break                      
+            elif args.objective == "sts":
+                trial.report(sts_corr, epoch)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break          
+            
         if pruned_trial:
             study.tell(trial, state=optuna.trial.TrialState.PRUNED)
-        else:       
+        elif args.objective == "all":   
+            epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3   
             study.tell(trial, epoch_acc, state=TrialState.COMPLETE)       
+        elif args.objective == "para":       
+            study.tell(trial, paraphrase_accuracy, state=TrialState.COMPLETE)  
+        elif args.objective == "sst":       
+            study.tell(trial, sentiment_accuracy, state=TrialState.COMPLETE)  
+        elif args.objective == "sts":       
+            study.tell(trial, sts_corr, state=TrialState.COMPLETE)    
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -301,6 +313,8 @@ def get_args():
     parser.add_argument("--local_files_only", action='store_true', default = True)
     parser.add_argument("--n_trials", type=int, default=100)
     parser.add_argument("--smart", action='store_true', default=True)
+    parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="all")
+    parser.add_argument("--hidden_dropout_prob2", type=float, default=None)
     
     args = parser.parse_args()
     return args
@@ -325,25 +339,25 @@ if __name__ == "__main__":
     
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
-        
-    with open('optuna/smart.txt', 'w') as f:
-        f.write('\n'.join(lines))     
+    
+    with open('optuna/smart-'+ f'{args.objective}.txt', 'w') as f:
+        f.write('\n'.join(lines))          
     
     fig = plot_optimization_history(study)
-    plt.savefig("optuna/smart-history.png")
+    plt.savefig("optuna/smart-" + f'{args.objective}-history.png')
     fig = plot_intermediate_values(study)
-    plt.savefig("optuna/smart-intermediate.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-intermediate.png')
     fig = plot_parallel_coordinate(study)
-    plt.savefig("optuna/smart-parallel.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-parallel.png')
     fig = plot_contour(study)
-    plt.savefig("optuna/smart-contour.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-contour.png')
     fig = plot_slice(study)
-    plt.savefig("optuna/smart-slice.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-slice.png')
     fig = plot_param_importances(study)
-    plt.savefig("optuna/smart-parameter.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-parameter.png')
     fig = plot_edf(study)
-    plt.savefig("optuna/smart-edf.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-edf.png')
     fig = plot_rank(study)
-    plt.savefig("optuna/smart-rank.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-rank.png')
     fig = plot_timeline(study)
-    plt.savefig("optuna/smart-timeline.png")
+    plt.savefig("optuna/smart-"+ f'{args.objective}-timeline.png')

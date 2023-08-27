@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=optuna-smart
+#SBATCH --job-name=optuna-smart-sts
 #SBATCH -t 24:00:00                  # estimated time # TODO: adapt to your needs
 #SBATCH -p grete:shared              # the partition you are training on (i.e., which nodes), for nodes see sinfo -p grete:shared --format=%N,%G
 #SBATCH -G A100:1                   # take 1 GPU, see https://www.hlrn.de/doc/display/PUB/GPU+Usage for more options
@@ -28,7 +28,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Run the script:
-python -u optuna_smart.py --use_gpu --batch_size 50
+python -u optuna_smart.py --use_gpu --batch_size 50 --objective sts
 
 # Run the script with logger:
 #python -u train_with_logger.py -l ~/${SLURM_JOB_NAME}_${SLURM_JOB_ID}  -t True -p True -d True -s True -f True

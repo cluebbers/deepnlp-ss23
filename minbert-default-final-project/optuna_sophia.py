@@ -85,7 +85,7 @@ def train_multitask(args):
     model = model.to(device)
     
     # OPTUNA
-    for _ in tqdm(range(args.n_trials)):
+    for _ in tqdm(range(args.n_trials), disable = TQDM_DISABLE):
         # optimizer choice 
         trial = study.ask()
         pruned_trial = False
@@ -341,18 +341,18 @@ if __name__ == "__main__":
     fig = plot_optimization_history(study)
     plt.savefig("optuna/sophia-" + f'{args.objective}-history.png')
     fig = plot_intermediate_values(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-intermediate.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-intermediate.png')
     fig = plot_parallel_coordinate(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-parallel.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-parallel.png')
     fig = plot_contour(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-contour.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-contour.png')
     fig = plot_slice(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-slice.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-slice.png')
     fig = plot_param_importances(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-parameter.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-parameter.png')
     fig = plot_edf(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-edf.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-edf.png')
     fig = plot_rank(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-rank.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-rank.png')
     fig = plot_timeline(study)
-    plt.savefig("optuna/sophia"+ f'{args.objective}-timeline.png')
+    plt.savefig("optuna/sophia-"+ f'{args.objective}-timeline.png')
