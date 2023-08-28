@@ -301,7 +301,7 @@ class SmartMultitaskBERT(nn.Module):
         Thus, your output should contain 5 logits for each sentence.
         '''          
         # and then projecting it using a linear layer.
-        embed_1 = self.droput_sst(embed_1)
+        embed_1 = self.dropout_sst(embed_1)
         sentiment_logit = self.sentiment_classifier(embed_1)
         
         return sentiment_logit
