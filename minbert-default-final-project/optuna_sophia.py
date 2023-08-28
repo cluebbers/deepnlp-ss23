@@ -207,8 +207,8 @@ def train_multitask(args):
                     optimizer_para.update_hessian()
                     optimizer_para.zero_grad(set_to_none=True)    
                     
-                #if num_batches >= n_iter:
-                    #break     
+                if num_batches >= 2*n_iter:
+                    break     
                 
             loss_para_train = loss_para_train / num_batches
                 
@@ -245,8 +245,8 @@ def train_multitask(args):
                     optimizer_sts.update_hessian()
                     optimizer_sts.zero_grad(set_to_none=True)
                     
-                #if num_batches >= n_iter:
-                    #break
+                if num_batches >= n_iter:
+                    break
             loss_sts_train = loss_sts_train / num_batches
 
             # train on sentiment analysis sst        
@@ -279,8 +279,8 @@ def train_multitask(args):
                     optimizer_sst.update_hessian()
                     optimizer_sst.zero_grad()
                     
-                #if num_batches >= n_iter:
-                    #break
+                if num_batches >= n_iter:
+                    break
             loss_sst_train = loss_sst_train / num_batches  
             
             # calculate accuracy on the dev sets
