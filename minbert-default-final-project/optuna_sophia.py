@@ -415,7 +415,7 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    seed_everything(args.seed)  # fix the seed for reproducibility    
+    seed_everything(args.seed)  # fix the seed for Reproducibility    
     study = optuna.create_study(direction="maximize", study_name=f'Sophia-{args.objective}',
                                 pruner =  optuna.pruners.HyperbandPruner(min_resource=1,
                                                                         max_resource=3))
