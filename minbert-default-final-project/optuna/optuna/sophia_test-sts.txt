@@ -1,0 +1,4 @@
+Number of finished trials: 80
+Number of pruned trials: 66
+Number of complete trials: 14
+Best value: 0.539978181812975 (params: {'dropout_sts': 0.26920911703243816, 'lr-sts': 1.3276866422792147e-05, 'rho_sts': 0.015494180270751202, 'weight_decay_sts': 0.14538792614026008, 'beta1': 0.9339927165138903, 'beta2': 0.9688640182023267})
