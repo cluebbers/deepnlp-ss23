@@ -28,7 +28,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Run the script:
-python -u multitask_classifier.py --use_gpu --option finetune  --epochs 20 --comment "sophia" --batch_size 64 --optimizer "_sophiag-opt" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --lr_para 3.45e-5 --lr_sst 2.5877e-5 --lr_sts 0.0004
+python -u multitask_classifier.py --use_gpu --option finetune  --epochs 20 --comment "_sophia-opt" --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --lr_para 3.45e-5 --lr_sst 2.5877e-5 --lr_sts 0.0004
 
 # Run the script with logger:
 #python -u train_with_logger.py -l ~/${SLURM_JOB_NAME}_${SLURM_JOB_ID}  -t True -p True -d True -s True -f True

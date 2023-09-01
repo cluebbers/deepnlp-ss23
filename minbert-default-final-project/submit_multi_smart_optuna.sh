@@ -28,7 +28,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Run the script:
-python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --optimizer "adamw" --epochs 20 --comment "_smart" --batch_size 32 --smart --multi_smart
+python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --optimizer "adamw" --epochs 20 --comment "_smart" --batch_size 32 --smart --multi_smart True
 
 # Run the script with logger:
 #python -u train_with_logger.py -l ~/${SLURM_JOB_NAME}_${SLURM_JOB_ID}  -t True -p True -d True -s True -f True
