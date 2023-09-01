@@ -22,7 +22,7 @@ def save_model(model, optimizer, args, config, filepath):
 		'args': args,
 		'model_config': config,
 		'system_rng': random.getstate(),
-		'numpy_rng': np.random.get_state(),
+		'numpy_rng': numpy.random.get_state(),
 		'torch_rng': torch.random.get_rng_state(),
 	}
 	torch.save(save_info, filepath)
@@ -53,7 +53,8 @@ def load_classifier_data(filename, flag='train'):
 
 def load_bert_model(config: dict):
 	kwargs = dict(
-		local_files_only = config.local_files_only
+		local_files_only = config.local_files_only,
+		attention_module = config.attention_module
 	)
 	bert = BertModel.from_pretrained('bert-base-uncased', **kwargs)
 	bert_grads = True if config.option == 'finetune' else False

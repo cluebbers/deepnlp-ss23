@@ -49,6 +49,9 @@ class BertPreTrainedModel(nn.Module):
     revision = kwargs.pop("revision", None)
     mirror = kwargs.pop("mirror", None)
 
+    from custom_attention import BertSelfAttention
+    attention_module = kwargs.pop('attention_module', BertSelfAttention)
+
     # Load config if we don't provide a configuration
     if not isinstance(config, PretrainedConfig):
       config_path = config if config is not None else pretrained_model_name_or_path
@@ -63,6 +66,7 @@ class BertPreTrainedModel(nn.Module):
         local_files_only=local_files_only,
         use_auth_token=use_auth_token,
         revision=revision,
+        attention_module=attention_module,
         **kwargs,
       )
     else:

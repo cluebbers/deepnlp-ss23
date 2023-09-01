@@ -216,12 +216,16 @@ def train(args):
                                 collate_fn=dev_dataset.collate_fn)
 
     # Init model
+    
+    from custom_attention import BertSelfAttention
+
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'num_labels': num_labels,
               'hidden_size': 768,
               'data_dir': '.',
               'option': args.option,
-              'local_files_only': args.local_files_only}
+              'local_files_only': args.local_files_only,
+              'attention_module': BertSelfAttention}
 
     config = SimpleNamespace(**config)
 
