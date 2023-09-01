@@ -163,7 +163,7 @@ That approach could improve the performance on the paraphrasing task by ... but 
 
 #### Tackle imbalanced data
 The distribution of the different classes in the SST dataset is not equal (class one contains over two times more samples than class zero). As we see in the confusion matrix of our model, which was trained as in the previous section, many datapoints from class 0 are falsely predicted to be in class one (same problem with classes five and four). 
-![alt text](confusion_matrix.png =100x100 )
+![](confusion_matrix.png | width=100)
 
 
 ### SMART
