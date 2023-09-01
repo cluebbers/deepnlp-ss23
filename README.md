@@ -129,7 +129,7 @@ python -u optuna_sophia.py --use_gpu --batch_size 64 --objective sts
 Optuna: `./optuna/Sophia-*`
 
 #### Adding Dropout Layers
-Since the overfitting problem remained after the hyperparameter tuning, we added an individual loss layer for every task to reduce the overfitting. So, before the BERT embeddings were passed to the linear classifier layer of a task a dropout on the embeddings was applied. The dropout probability can be chosen differently for the different task. We tuned the dropout probabilities together with the learning rate and weight decay in another optuna study. We received the following dropout probabilities:
+Since the overfitting problem remained after the hyperparameter tuning, we added an individual loss layer for every task to reduce the overfitting. So, before the BERT embeddings were passed to the linear classifier layer of a task a dropout on the embeddings was applied. The dropout probability can be chosen differently for the different tasks. We tuned the dropout probabilities together with the learning rate and weight decay in another optuna study. We received the following dropout probabilities:
 | Para Dropout       | SST Dropout | STS Dropout
 | ------------------ |---------------- | -------------- 
 |  15%  |     5.2 %         |      22 %       
@@ -168,7 +168,29 @@ The distribution of the different classes in the SST dataset is not equal (class
 
 <img src="confusion_matrix.png" alt="alt text" width="300" height="300">
 
+To balance the QQP and SST trainset we add weights to our Cross-Entropy loss function such that a training sample from a small class is assigned with an higher weight. This resulted in the following performance:
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Sophia_base |     .. %         |      .. %       | .. % |
+| Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
+Use the same command as in the previous section and add the argument  ```--para_sep True --weights True``` for reproducing the results.
+
+With this approach we could improve the performance on the SST dataset compared to the last section by ... . 
+
+#### Additional layers
+Another problem we earlier observed was that the task contradict each other, i.e. in separating QQP training the paraphrasing accuracy increased but the other to accuracies decreased. We try to solve these conflicts by adding a simple neural network with one hidden layer as classifier for each task instead of only a linear classifier. The idea is that each task gets more parameters to adjust which are not influenced by the other tasks. As activation function in the neuronal network we tested ReLu and tanh activation layers between the hidden layer and the output, but both options performed equally poor. 
+| Model name         | SST train_accuracy | QQP train_accuracy | STS train_correlation |
+| ------------------ |---------------- | -------------- | ---
+| Sophia_base |     .. %         |      .. %       | .. % |
+| Sophia_dropout  |     .. %         |      ..%       | ..%  |
+
+Use the same command as in the previous section and add the argument  ```--para_sep True --weights True --add_layers True``` for reproducing the results.
+
+The loss of all trainsets went down during training but the train accuracy didn't increase during the training. We conclude that the model with the additional layers gets overconfident on some correct samples. Thus, the predicted probabilities increase a lot during training. Resulting in decreasing loss during training while the train accuracy doesn't increase at all. The confusion matrix of the para set confirms this. The model predicts zero all the time, which indicates a high confidence in it's predictions: 
+ <img src="confusion_matrix_add_layer.png" alt="alt text" width="300" height="300">
+
+Since we still have a strong overfitting problem and the additional layers didn't help at all we decided to not further experiment with this idea.
 ### SMART
 
 #### Implementation
