@@ -187,7 +187,8 @@ Another problem we earlier observed was that the task contradict each other, i.e
 
 Use the same command as in the previous section and add the argument  ```--para_sep True --weights True --add_layers True``` for reproducing the results.
 
-The loss of all trainsets went down during training but the train accuracy didn't increase during the training. We conclude that the model with the additional layers gets overconfident on some correct samples. Thus, the predicted probabilities increase a lot during training. Resulting in decreasing loss during training while the train accuracy doesn't increase at all. The confusion matrix of the para set confirms this. The model predicts zero all the time, which indicates a high confidence in it's predictions: 
+The loss of all trainsets went down during training but the train accuracy didn't increase during the training. We conclude that the model with the additional layers gets overconfident on some correct samples. Thus, the predicted probabilities increase a lot during training. Resulting in decreasing loss during training while the train accuracy doesn't increase at all. The confusion matrix of the para set confirms this. The model predicts zero all the time, which indicates a high confidence in it's predictions:
+ 
  <img src="confusion_matrix_add_layer.png" alt="alt text" width="300" height="300">
 
 Since we still have a strong overfitting problem and the additional layers didn't help at all we decided to not further experiment with this idea.
