@@ -286,10 +286,13 @@ def train_multitask(args):
 
         para_loss += sum(islice(para_generator, size_language_training))
         sst_loss += sum(islice(sst_generator, size_language_pretrain)) 
-        para_loss += sum(islice(para_generator, size_language_pretrain)) 
-        sts_loss += sum(islice(sts_generator, size_language_finetune))
-        para_loss += sum(islice(para_generator, size_language_finetune))
-        sst_loss += sum(islice(sst_generator, size_language_finetune)) 
+        para_loss += sum(islice(para_generator, size_language_pretrain))
+
+        # round robin training: sts -> para -> sst -> sts -> para -> sst
+        for sts, para, sst in zip(sts_generator, para_generator, sst_generator):
+            sts_loss += sts
+            para_loss += para
+            sst_loss += sst
 
         sts_loss = sts_loss / dataloaders.sts_train_dataloader_size
         sst_loss = sst_loss / dataloaders.sst_train_dataloader_size
