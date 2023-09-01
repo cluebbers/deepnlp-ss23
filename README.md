@@ -46,6 +46,14 @@ My priority issues would be
 4. [Multitask finetuning](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/10#tab-issues)
     - current implementation of multitask finetuning multitask_classifier_learning.py is **very** basic
     - it could also work as regularization, since it not perfectly trains on the loss of every single task
+5. [Generalisations on Custom Attention](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/11#tab-issues)
+    - At this Station we are considering/trying three ideas of Generalisations by hyperparameters on the Bert-Self-Attention (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/54))
+    - Although the idea of envolving more hyperparameters, should improve the result, however because of overfitting we are getting even a bit lower accuracy.
+    - Sparessmax (paper) : (https://arxiv.org/abs/1602.02068v2).
+6. [Splitted and reordererd batches](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/12#tab-issues)
+    - At this Step we are considring a specific order of batches by splitting the the datasets and put them in a specific order, (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/59)).
+    - The idea works. We recieve at least 1% more accurcy at each task.    
+
 
 I suggest to test things locally. If applicable only on classifier.py It is the fastest task. 
 
@@ -125,16 +133,19 @@ Our model achieves the following performance on :
 
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
+## Remaining not tested ideas
+   - Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task. 
+
 ## Contributing
 
 >📋  Pick a licence and describe how to contribute to your code repository. 
 
 ## Member Contributions
-Dawor, Moataz:
+Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset 
 
 Lübbers, Christopher L.: Part 1: Sentiment analysis with BERT; Part 2: multitask_classifier.MultitaskBERT, multitask_classifier.train_multitask, Tensorboard (metrics  + profiler), optimizer_sophia.py, Baseline
 
-Niegsch, Luaks*:
+Niegsch, Luaks*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
 Schmidt, Finn Paul:
 
