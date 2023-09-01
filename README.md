@@ -30,7 +30,7 @@ Similarity and paraphrase are similar tasks, so we tried to compute cosine simil
 This way the similarity layer gets updated when training for paraphrase detection.
 
 The training order in baseline is sts -> sst -> qqp. 
-Since paraphrase has the largest dataset and performs best, we changed the training order to train on paraphrase first qqp -> sts -> qqp.
+Since paraphrase has the largest dataset and performs best, we changed the training order to train on paraphrase first qqp -> sts -> sst.
 
 SMART is an approach for regularization and uses adverserial learning. 
 It adds noise to the original embeddings, calculates logits and an adverserial loss to the unperturbed logits. 
@@ -129,10 +129,41 @@ python -u optuna_sophia.py --use_gpu --batch_size 64 --objective sts
 Optuna: `./optuna/Sophia-*`
 
 #### Adding Dropout Layers
-Since the overfitting problem remained after the hyperparameter tuning, we added an individual loss layer for every task to reduce the overfitting. So, before the BERT embeddings were passed to the linear classifier layer of a task a dropout on the embeddings was applied. The dropout probability can be chosen differently for the different task. We tuned the dropout probabilities together with the learning rate and weight decay in another optuna study. We recieved the following dropout probabilities:
+Since the overfitting problem remained after the hyperparameter tuning, we added an individual loss layer for every task to reduce the overfitting. So, before the BERT embeddings were passed to the linear classifier layer of a task a dropout on the embeddings was applied. The dropout probability can be chosen differently for the different task. We tuned the dropout probabilities together with the learning rate and weight decay in another optuna study. We received the following dropout probabilities:
 | Para Dropout       | SST Dropout | STS Dropout
 | ------------------ |---------------- | -------------- 
 |  15%  |     5.2 %         |      22 %       
+
+We obtained the following results
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Sophia_base |     .. %         |      .. %       | .. % |
+| Sophia_dropout  |     .. %         |      ..%       | ..%  |
+To reproduce this result run: 
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 10 --hidden_dropout_prob_para 0.15 --hidden_dropout_prob_sst 0.052 --hidden_dropout_prob_sts 0.22 
+--lr_para 1.8e-05 --lr_sst 5.6e-06 --lr_sts 1.1e-05 --weight_decay_para 0.038 --weight_decay_sst 0.17 --weight_decay_sts 0.22
+--comment individual_dropout
+```
+The dropout layers ... the performance. 
+The overfitting problem still exists
+
+#### Seperate QQP training
+The QQP dataset is way bigger than the other two datasets. 
+Thus, we might overfit on the SemEval and SST dataset before the model is trained out on the QQP dataset.
+To tackle this, we train the first 5 epochs only on the QQP dataset. The last epochs are trained on all datasets, but we only train on a randomly sampled tiny fraction of the QQP dataset, which has the same size as the other two datasets. The dropout layers and hyperparameters of the previous section were kept, since they should make the model more robust.
+The following results were obtained:
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Sophia_base |     .. %         |      .. %       | .. % |
+| Sophia_dropout  |     .. %         |      ..%       | ..%  |
+Use the same command as in the previous section and add the argument  ```--para_sep True``` for reproducing the results.
+
+That approach could improve the performance on the paraphrasing task by ... but we lost a few percentage points on the other task. So we conclude, on the on hand training on the QQP dataset first actually helps to gain more information from this huge dataset but on the other hand the three tasks seem to conflict each other. 
+
+#### Tackle imbalanced data
+The distribution of the different classes in the SST dataset is not equal (class one contains over two times more samples than class zero). As we see in the confusion matrix of our model, which was trained as in the previous section, many datapoints from class 0 are falsely predicted to be in class one (same problem with classes five and four). 
+![alt text](confusion_matrix.png )
 
 
 ### SMART
