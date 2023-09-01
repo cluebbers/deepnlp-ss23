@@ -139,6 +139,7 @@ We obtained the following results
 | ------------------ |---------------- | -------------- | ---
 | Sophia_base |     .. %         |      .. %       | .. % |
 | Sophia_dropout  |     .. %         |      ..%       | ..%  |
+
 To reproduce this result run: 
 ```
 python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 10 --hidden_dropout_prob_para 0.15 --hidden_dropout_prob_sst 0.052 --hidden_dropout_prob_sts 0.22 
@@ -157,13 +158,14 @@ The following results were obtained:
 | ------------------ |---------------- | -------------- | ---
 | Sophia_base |     .. %         |      .. %       | .. % |
 | Sophia_dropout  |     .. %         |      ..%       | ..%  |
+
 Use the same command as in the previous section and add the argument  ```--para_sep True``` for reproducing the results.
 
 That approach could improve the performance on the paraphrasing task by ... but we lost a few percentage points on the other task. So we conclude, on the on hand training on the QQP dataset first actually helps to gain more information from this huge dataset but on the other hand the three tasks seem to conflict each other. 
 
 #### Tackle imbalanced data
 The distribution of the different classes in the SST dataset is not equal (class one contains over two times more samples than class zero). As we see in the confusion matrix of our model, which was trained as in the previous section, many datapoints from class 0 are falsely predicted to be in class one (same problem with classes five and four). 
-![](confusion_matrix.png | width=100)
+![ ](confusion_matrix.png | width=100)
 
 
 ### SMART
