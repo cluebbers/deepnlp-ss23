@@ -125,18 +125,18 @@ Our model achieves the following performance on :
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
 ## Remaining not tested ideas
-   - Since the huge size of the para dataset (copmaring) to to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. This could be achieved be generating more true data from the datasets sst and sts, which is possible by adding another additional Task. 
+   - Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task. 
 
 ## Contributing
 
 >📋  Pick a licence and describe how to contribute to your code repository. 
 
 ## Member Contributions
-Dawor, Moataz:
+Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset 
 
 Lübbers, Christopher L.: Part 1: Sentiment analysis with BERT; Part 2: multitask_classifier.MultitaskBERT, multitask_classifier.train_multitask, Tensorboard (metrics  + profiler), optimizer_sophia.py, Baseline
 
-Niegsch, Luaks*:
+Niegsch, Luaks*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
 Schmidt, Finn Paul:
 
