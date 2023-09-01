@@ -65,6 +65,9 @@ python multitask_classifier.py --use_gpu --batch_size 20 --lr 1e-5 --epochs 30 -
 ```
 Tensorboard: Jul23_21-38-22_Part2_baseline
 
+For creating the baseline, we simply trained the in part one implemented Bert model on all data sets using the AdamW optimizer from part one with the standard hyperparameters ($lr = 1e-05$, $(\beta_{1},\beta_{2}) = (0.9, 0.999)$). In each epoch we trained first on the whole Quora trainset, then on the whole SemEval trainset and finally on the whole SST trainset. We used Cross-Entropy loss on the Quora and SST trainset and on the SemEval set we used MSE-loss applied to the cosine similarity of the bert embeddings of the two input sentences.
+To perform the paraphrasing and sentiment anaylsis task, a simple linear classifier layer was added on top of the BERT embeddings.
+
 After 5 epochs no significant improvements in dev metrics. Train accuracy is nearly 100 % for every task.
 The conclusion is overfitting.
 We did another run and recorded the dev loss.
@@ -124,6 +127,13 @@ python -u optuna_sophia.py --use_gpu --batch_size 64 --objective sst
 python -u optuna_sophia.py --use_gpu --batch_size 64 --objective sts
 ``` 
 Optuna: `./optuna/Sophia-*`
+
+#### Adding Dropout Layers
+Since the overfitting problem remained after the hyperparameter tuning, we added an individual loss layer for every task to reduce the overfitting. So, before the BERT embeddings were passed to the linear classifier layer of a task a dropout on the embeddings was applied. The dropout probability can be chosen differently for the different task. We tuned the dropout probabilities together with the learning rate and weight decay in another optuna study. We recieved the following dropout probabilities:
+| Para Dropout       | SST Dropout | STS Dropout
+| ------------------ |---------------- | -------------- 
+|  15%  |     5.2 %         |      22 %       
+
 
 ### SMART
 
