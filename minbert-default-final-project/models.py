@@ -236,7 +236,6 @@ class SmartMultitaskBERT(nn.Module):
 
         self.hidden_size = BERT_HIDDEN_SIZE
         self.num_labels = N_SENTIMENT_CLASSES
-        self.dropout2 = config.hidden_dropout_prob2
         
         # see bert.BertModel.embed
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
@@ -245,10 +244,6 @@ class SmartMultitaskBERT(nn.Module):
         self.dropout_sts = torch.nn.Dropout(config.hidden_dropout_prob_sts)
         
         self.relu = torch.nn.Tanh()
-        
-        
-        if self.dropout2 is not None:
-            self.dropout2 = torch.nn.Dropout(config.hidden_dropout_prob2)
         
         # linear sentiment classifier
         self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
@@ -276,9 +271,9 @@ class SmartMultitaskBERT(nn.Module):
         attention_mask_2=None,
         task_id=0,
         task_na=0,
-        add_layers=False,
         embednoise_1=None,
-        embednoise_2=None):
+        embednoise_2=None,
+        add_layers=False):
         
         if task_na==2:
             embed_1 = embednoise_1
@@ -287,13 +282,7 @@ class SmartMultitaskBERT(nn.Module):
             # input embeddings
             embed_1 = self.bert(input_ids_1, attention_mask_1)['pooler_output']            
             embed_2 = self.bert(input_ids_2, attention_mask_2)['pooler_output'] if input_ids_2 is not None else None
-            
-        embed_1 = self.dropout(embed_1)
-        if self.dropout2 is not None:
-            embed_2 = self.dropout2(embed_2) if input_ids_2 is not None else None
-        else:
-            embed_2 = self.dropout(embed_2) if input_ids_2 is not None else None
-        
+                    
         if task_na == 1:
             return embed_1, embed_2
         
@@ -305,8 +294,6 @@ class SmartMultitaskBERT(nn.Module):
             return self.predict_similarity(embed_1, embed_2,add_layers=add_layers)
         else:
             raise ValueError("Invalid task_id")
-       
-            
 
     def predict_sentiment(self, embed_1,add_layers=False):
         '''Given a batch of sentences, outputs logits for classifying sentiment.
@@ -384,7 +371,7 @@ class SmartMultitaskBERT(nn.Module):
             '''
             embed_1 = self.similarity_hidden_layer(embed_1) #lower dimension to 20 before applying cosine similarity
             embed_2 = self.similarity_hidden_layer(embed_2)
-            similarity = (self.similarity_classifier(embed1, embed2)+1)*2.5
+            similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
         else:
             similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
         
