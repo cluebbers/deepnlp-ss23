@@ -14,9 +14,18 @@ You will then implement extensions to improve on top of this baseline.
 * There is a detailed description of the code structure in [STRUCTURE.md](./STRUCTURE.md), including a description of which parts you will need to implement.
 * You are only allowed to use libraries that are installed by `setup.sh`, external libraries that give you other pre-trained models or embeddings are not allowed (e.g., `transformers`).
 
-## Handout
+## Added Python Scripts
 
-Please refer to the handout for a through description of the project and its parts.
+### error-analysis.py
+
+This python script returns a couple of graphics, which can be found in the error_analysis folder. All graphics are obtained from the dev part of the three dataset and from the predictions of the model on the dev data. 
+
+We created confusion matrix of the models precition with the actual labels on the QQP and SST set. Those lead to the idea to use weights in the loss function.
+
+Furthermore, we created a scatter plot of predicted similarity on the SemEval set (x-axis) and it's true similarity (y-axis). Additionally, we cretaed histograms of the predicted similarity distribution and the actual similarity distribution. Both show that the model tends to predict relatively high similarities compared to ground truth.
+
+At last we visualized the BERT embeddings of the first hundred samples of the SST dev set using t-SNE. Surprisingly, the samples of the class 0 are clustered together quite well, although the confusion matrix of the sst datset shows that the model struggles to predict class 0 correctly. 
+
 
 ### Acknowledgement
 
