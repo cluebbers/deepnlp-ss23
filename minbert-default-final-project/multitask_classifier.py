@@ -75,6 +75,11 @@ def train_multitask(args):
     # CLL end
 
     # Init model
+    if args.para_sep:
+        dropout_para = 0.056 #found in hyperparameter tuning for only para 
+    else:
+        dropout_para = args.hidden_dropout_prob_para
+    
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'hidden_dropout_prob2': args.hidden_dropout_prob2,
               'hidden_dropout_prob_para': args.hidden_dropout_prob_para,
@@ -110,15 +115,14 @@ def train_multitask(args):
     if args.optimizer == "sophiag":
         #optimizer = SophiaG(model.parameters(), lr=lr,rho=0.03, weight_decay=0.13)
         if args.para_sep:
-            optimizer_para= SophiaG(model.parameters(), lr=args.lr_para, betas=(args.beta1_para, args.beta2_para), rho = args.rho_para, weight_decay=args.weight_decay_para)
-        else: #different para_optimizer on the last epochs during training on all datasets
-            optimizer_para= SophiaG(model.parameters(), lr=args.lr_para, betas=(args.beta1_para, args.beta2_para), rho = args.rho_para, weight_decay=args.weight_decay_para)
+            optimizer_para= SophiaG(model.parameters(), lr=1e-5, betas=(0.959, 0.92), rho = 0.04, weight_decay=0.25)
+        else: #try different para_optimizer on the last epochs during training on all datasets
+            optimizer_para= SophiaG(model.parameters(), lr=args.lr_para, rho = args.rho_para, weight_decay=args.weight_decay_para)
         
         
-        #optimizer_sst= SophiaG(model.parameters(), lr=args.lr_sst, betas=(args.beta1_sst, args.beta2_sst), rho = args.rho_sst, weight_decay=args.weight_decay_sst)
-        #optimizer_sts= SophiaG(model.parameters(), lr=args.lr_sts, betas=(args.beta1_sts, args.beta2_sts), rho = args.rho_sts, weight_decay=args.weight_decay_sts)
-        optimizer_sst = SophiaG(model.parameters(), lr=lr,rho=0.03, weight_decay=0.13)
-        optimizer_sts = SophiaG(model.parameters(), lr=lr,rho=0.03, weight_decay=0.13)
+        optimizer_sts= SophiaG(model.parameters(), lr=args.lr_sts, betas=(args.beta1_sts, args.beta2_sts), rho = args.rho_sts, weight_decay=args.weight_decay_sts)
+        optimizer_sst = SophiaG(model.parameters(), lr=args.lr_sst,rho=args.rho_sst, weight_decay=args.weight_decay_sst)
+        optimizer_sts = SophiaG(model.parameters(), lr=args.lr_sts,rho=args.rho_sts, weight_decay=args.weight_decay_sts)
         #how often to update the hessian?
         k = args.k_for_sophia
     else:
@@ -748,7 +752,7 @@ if __name__ == "__main__":
             args.comment = "para_only"+"_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
             train_multitask(args)
             args.skip_para = True
-            args.epochs = 10
+            args.epochs = 20
             args.comment = "para_skip""_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
             args.para_sep = False
             train_multitask(args)
