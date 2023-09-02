@@ -133,7 +133,7 @@ def train_step_sts_generator(model, dataloaders, optimizer, epoch, args, perturb
         # So maybe the mean squared error is a suitable loss function for the beginning,
         # since it punishes a prediction that is far away from the truth disproportionately
         # more than a prediction that is close to the truth
-        loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
+        loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
         loss += adv_loss
         if args.option == "pretrain":
             loss.requires_grad = True
@@ -151,7 +151,7 @@ def train_step_sst_generator(model, dataloaders, optimizer, epoch, args, perturb
         
         # SMART
         if args.smart:
-            adv_loss = smart_perturbation_sst.forward(
+            adv_loss = perturbation.forward(
                 model=model,
                 logits=logits,
                 input_ids_1=b_ids,                
@@ -161,8 +161,8 @@ def train_step_sst_generator(model, dataloaders, optimizer, epoch, args, perturb
         else:
             adv_loss = 0  
         
-        w = torch.FloatTensor([2.1,1,1.3,1,1.8]).to(device)
         if args.weights:
+            w = torch.FloatTensor([2.1,1,1.3,1,1.8]).to(dataloaders.device)
             original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean', weight=w)#,label_smoothing=0.1)
         else:
             original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
@@ -182,7 +182,7 @@ def train_step_para_generator(model, dataloaders, optimizer, epoch, args, pertur
 
         # SMART
         if args.smart:
-            adv_loss = smart_perturbation_para.forward(
+            adv_loss = perturbation.forward(
                 model=model,
                 logits=logits,
                 input_ids_1=b_ids1,                
@@ -202,7 +202,7 @@ def train_step_para_generator(model, dataloaders, optimizer, epoch, args, pertur
         #there are roughly 1.66 times more non_paraphrase samples as is_paraphrase samples
         #thus weight a positive sample with weight 1.66
         if args.weights:
-            w_p = torch.FloatTensor([1.66]).to(device)
+            w_p = torch.FloatTensor([1.66]).to(dataloaders.device)
             original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean', pos_weight=w_p)
         else: 
             original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
@@ -329,7 +329,6 @@ def train_multitask(args):
                 sst_loss += loss
                 sst_loss_count += 1 
 
-        # TODO: important!! we sometimes skip values, but we use full size
         sts_loss = sts_loss / sts_loss_count
         sst_loss = sst_loss / sst_loss_count
         para_loss = para_loss / para_loss_count
@@ -368,10 +367,10 @@ def train_multitask(args):
         
         (para_loss,dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
          sst_loss,dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
-         sts_loss,dev_sts_cor, *_ )= smart_eval(sst_dev_dataloader,
-                                                 para_dev_dataloader,
-                                                 sts_dev_dataloader,
-                                                 model, device, n_iter)        
+         sts_loss,dev_sts_cor, *_ )= smart_eval(dataloaders.sst_dev_dataloader,
+                                                dataloaders.para_dev_dataloader,
+                                                dataloaders.sts_dev_dataloader,
+                                                model, device, n_iter)        
 
         # tensorboard
         writer.add_scalar("para/dev_loss", para_loss, epoch)

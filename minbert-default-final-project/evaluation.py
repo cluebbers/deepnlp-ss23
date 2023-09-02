@@ -255,7 +255,7 @@ def test_model_multitask(args, model, device):
 
     _,dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids,_,_,_, \
         _,dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids,_,_,_,_,dev_sts_corr, \
-        dev_sts_y_pred, dev_sts_sent_ids = model_eval_multitask(model, device, dataloaders, dev = True)
+        dev_sts_y_pred, dev_sts_sent_ids, embed, labels = model_eval_multitask(model, device, dataloaders, dev = True)
 
     test_para_y_pred, test_para_sent_ids, test_sst_y_pred, \
         test_sst_sent_ids, test_sts_y_pred, test_sts_sent_ids = \
