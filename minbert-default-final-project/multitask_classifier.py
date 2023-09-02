@@ -180,113 +180,11 @@ def train_multitask(args):
     best_sts_dev_cor = 0
     best_dev_acc = 0
     
-    n_iter= len(sst_train_dataloader)
+    n_iter= len(para_train_dataloader)
                   
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
-        # train on paraphrasing
-        # CLL add training on other tasks
-        # paraphrasing
-        # see evaluation.py line 72
-        
-        # profiler
-        if profiler:
-            prof.start()
-        
-        model.train()
-        train_loss = 0
-        num_batches = 0
-        
-        # datasets.py line 145
-        for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
-            if args.skip_para: #train the last epochs only on a small fraction of the para data
-                rand = np.random.uniform()
-                if rand >= len(sst_train_dataloader)/(2*len(para_train_dataloader)): #train on batch only with a certain probability 
-                #-> the mean of trained batches is half of the number of batches as in the sst set(the smallest dataset of all three)
-                    continue
-                
-            b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
-                                                          batch['token_ids_2'], batch['attention_mask_2'],
-                                                          batch['labels'])
             
-            b_ids1 = b_ids1.to(device)
-            b_mask1 = b_mask1.to(device)
-            b_ids2 = b_ids2.to(device)
-            b_mask2 = b_mask2.to(device)
-            b_labels = b_labels.to(device)
-
-            optimizer_para.zero_grad()
-            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1,add_layers=args.add_layers)
-            
-            # SMART
-            if args.smart:
-                adv_loss = smart_perturbation_para.forward(
-                    model=model,
-                    logits=logits,
-                    input_ids_1=b_ids1,                
-                    attention_mask_1=b_mask1,
-                    input_ids_2=b_ids2,
-                    attention_mask_2=b_mask2,
-                    task_id=1,
-                    task_type=smart.TaskType.Classification) 
-            else:
-                adv_loss = 0
-            
-            # we need a loss function that handles logits. maybe this one?
-            # paraphrasing is a binary task, so binary
-            # we get logits, so logits
-            # this one also has a sigmoid activation function
-            # to balance train data add weights in loss function 
-            #there are roughly 1.66 times more non_paraphrase samples as is_paraphrase samples
-            #thus weight a positive sample with weight 1.66
-            if args.weights:
-                w_p = torch.FloatTensor([1.66]).to(device)
-                original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean', pos_weight=w_p)
-            else: 
-                original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
-           
-            loss = original_loss + adv_loss
-
-            loss.backward()
-            optimizer_para.step()
-
-            train_loss += loss.item()
-            num_batches += 1
-            
-            # SOPHIA
-            # update hession EMA
-            if args.optimizer == "sophiag" and num_batches % k == k - 1:  
-                optimizer_para.update_hessian()
-                optimizer_para.zero_grad()         
-            
-            # profiling step
-            if profiler:
-                prof.step()
-                 # stop after wait + warmup +active +repeat
-                if num_batches >= (1 + 1 + 3):
-                    break   
-                
-            # TODO for testing
-            if num_batches >= args.num_batches_para:
-                 break
-             
-
-            
-
-        train_loss = train_loss / num_batches
-
-        
-        # tensorboard
-        writer.add_scalar("para/train_loss", train_loss, epoch)
-        
-        print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {train_loss:.3f}")
-        
-        # profiler stop after one epoch
-        if profiler:
-            prof.stop()
-            break
-        
-        
         #train on semantic textual similarity (sts)
         
         # profiler start
@@ -456,8 +354,7 @@ def train_multitask(args):
         # profiler
         if profiler:
             prof.stop()
-        '''
-        # train on paraphrasing
+       # train on paraphrasing
         # CLL add training on other tasks
         # paraphrasing
         # see evaluation.py line 72
@@ -472,7 +369,12 @@ def train_multitask(args):
         
         # datasets.py line 145
         for batch in tqdm(para_train_dataloader, desc=f'train-para-{epoch}', disable=TQDM_DISABLE):            
-            
+            if args.skip_para: #train the last epochs only on a small fraction of the para data
+                rand = np.random.uniform()
+                if rand >= len(sst_train_dataloader)/(2*len(para_train_dataloader)): #train on batch only with a certain probability 
+                #-> the mean of trained batches is half of the number of batches as in the sst set(the smallest dataset of all three)
+                    continue
+                
             b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
                                                           batch['token_ids_2'], batch['attention_mask_2'],
                                                           batch['labels'])
@@ -483,12 +385,12 @@ def train_multitask(args):
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
 
-            optimizer.zero_grad()
-            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
+            optimizer_para.zero_grad()
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1,add_layers=args.add_layers)
             
             # SMART
             if args.smart:
-                adv_loss = smart_perturbation.forward(
+                adv_loss = smart_perturbation_para.forward(
                     model=model,
                     logits=logits,
                     input_ids_1=b_ids1,                
@@ -504,11 +406,19 @@ def train_multitask(args):
             # paraphrasing is a binary task, so binary
             # we get logits, so logits
             # this one also has a sigmoid activation function
-            original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
+            # to balance train data add weights in loss function 
+            #there are roughly 1.66 times more non_paraphrase samples as is_paraphrase samples
+            #thus weight a positive sample with weight 1.66
+            if args.weights:
+                w_p = torch.FloatTensor([1.66]).to(device)
+                original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean', pos_weight=w_p)
+            else: 
+                original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
+           
             loss = original_loss + adv_loss
 
             loss.backward()
-            optimizer.step()
+            optimizer_para.step()
 
             train_loss += loss.item()
             num_batches += 1
@@ -516,8 +426,8 @@ def train_multitask(args):
             # SOPHIA
             # update hession EMA
             if args.optimizer == "sophiag" and num_batches % k == k - 1:  
-                optimizer.update_hessian()
-                optimizer.zero_grad()         
+                optimizer_para.update_hessian()
+                optimizer_para.zero_grad()         
             
             # profiling step
             if profiler:
@@ -529,10 +439,9 @@ def train_multitask(args):
             # TODO for testing
             if num_batches >= args.num_batches_para:
                  break
-            
 
         train_loss = train_loss / num_batches
-        
+
         # tensorboard
         writer.add_scalar("para/train_loss", train_loss, epoch)
         
@@ -542,7 +451,7 @@ def train_multitask(args):
         if profiler:
             prof.stop()
             break
-        '''
+        
         # evaluation
         
         (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
@@ -707,7 +616,7 @@ def get_args():
     parser.add_argument("--local_files_only", action='store_true', default = True),
     # optimizer
     #default parameters are from the hyperparameter tuning with optuna
-    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="sophiag")
+    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw")
     parser.add_argument("--weight_decay_para", help="default for 'adamw': 0.01", type=float, default=0.16)
     parser.add_argument("--weight_decay_sst", help="default for 'adamw': 0.01", type=float, default=0.11)
     parser.add_argument("--weight_decay_sts", help="default for 'adamw': 0.01", type=float, default=0.15)
@@ -747,18 +656,19 @@ if __name__ == "__main__":
     if args.smart:
         args.comment = "smart"
         train_multitask(args)
-    else:
-        if args.para_sep:
-            args.comment = "para_only"+"_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
-            train_multitask(args)
-            args.skip_para = True
-            args.epochs = 20
-            args.comment = "para_skip""_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
-            args.para_sep = False
-            train_multitask(args)
-        else:
-            args.comment = "sophia"
-            train_multitask(args)
+    elif args.para_sep:
+        args.comment = "para_only"+"_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
+        train_multitask(args)
+        args.skip_para = True
+        args.epochs = 20
+        args.comment = "para_skip""_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
+        args.para_sep = False
+        train_multitask(args)
+    elif args.optimizer == "sophiag":
+        args.comment = "sophia"
+        train_multitask(args)
+    elif args.optimizer == "adamw":
+        train_multitask(args)
 
     # if not args.profiler:
     #     test_model(args)
