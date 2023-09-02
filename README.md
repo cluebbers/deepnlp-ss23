@@ -36,6 +36,12 @@ Um nicht linearen classifier zu verwenden nutze:
 ```
 submit_multi_adamw_add_layers.sh
 ```
+Ergebnisse:
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Adam new base |     50,3 %         |      86,4 %       | 84,7 % |
+| Adam additional layer|     50%          |      88,4%        | 84,4 % |
+
 ## Methodology
 
 ### Part 1
