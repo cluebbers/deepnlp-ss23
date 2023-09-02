@@ -336,8 +336,8 @@ class MultitaskDataloader:
         para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, collate_fn=para_dev_data.collate_fn,
                                         **common_dataloader_params)
         
-        sts_train_data = SentencePairDataset(sts_train_data, args)
-        sts_dev_data = SentencePairDataset(sts_dev_data, args)
+        sts_train_data = SentencePairDataset(sts_train_data, args, isRegression = True)
+        sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression = True)
         sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, collate_fn=sts_train_data.collate_fn,
                                         **common_dataloader_params)
         sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, collate_fn=sts_dev_data.collate_fn,
@@ -410,6 +410,8 @@ class MultitaskDataloader:
 
     def iter_sts(self, dataloader, tqdm_desc, evaluate):
         for batch in self.iter_impl(dataloader, tqdm_desc, self.args.num_batches_sts):
+            if self.args.para_sep:
+                break
             output = [
                 batch['token_ids_1'].to(self.device),
                 batch['attention_mask_1'].to(self.device),
@@ -423,6 +425,8 @@ class MultitaskDataloader:
 
     def iter_sst(self, dataloader, tqdm_desc, evaluate):
         for batch in self.iter_impl(dataloader, tqdm_desc, self.args.num_batches_sst):
+            if self.args.para_sep:
+                break
             output = [
                 batch['token_ids'].to(self.device),
                 batch['attention_mask'].to(self.device),
@@ -434,6 +438,12 @@ class MultitaskDataloader:
 
     def iter_para(self, dataloader, tqdm_desc, evaluate):
         for batch in self.iter_impl(dataloader, tqdm_desc, self.args.num_batches_para):
+            #train the last epochs only on a small fraction of the para data
+            if self.args.skip_para:
+                rand = np.random.uniform()
+                if rand >= self.sst_train_dataloader_size / (2 * self.para_train_dataloader_size): #train on batch only with a certain probability 
+                #-> the mean of trained batches is half of the number of batches as in the sst set(the smallest dataset of all three)
+                    continue
             output = [
                 batch['token_ids_1'].to(self.device),
                 batch['attention_mask_1'].to(self.device),

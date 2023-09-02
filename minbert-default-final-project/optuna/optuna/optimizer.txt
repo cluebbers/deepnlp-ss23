@@ -1,0 +1,4 @@
+Number of finished trials: 100
+Number of pruned trials: 45
+Number of complete trials: 55
+Best value: 0.23384926909622536 (params: {'Optimizer': 'SophiaG', 'lr-sophia': 0.0005976441070670719, 'wd_sophia': 0.0014119044664529861, 'rho': 0.25102705128711367, 'k': 10})

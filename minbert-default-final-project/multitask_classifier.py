@@ -11,17 +11,25 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from bert import BertModel
-from optimizer import AdamW
+from optimizer import *
 from tqdm import tqdm
+
+from datasets import SentenceClassificationDataset, SentencePairDataset, \
+    load_multitask_data, load_multitask_test_data
+
+from models import *
+from optimizer import SophiaG
 
 from evaluation import test_model_multitask
 
 # CLL import multitask evaluation
-from evaluation import model_eval_multitask
+from evaluation import smart_eval
 # tensorboard
 from torch.utils.tensorboard import SummaryWriter
-# SOPHIA
-from optimizer_sophia import SophiaG
+
+# SMART regularization
+from smart_perturbation import SmartPerturbation
+import smart_utils as smart
 # profiling
 from torch.profiler import profile, record_function, ProfilerActivity
 from custom_attention import *
@@ -32,163 +40,63 @@ from itertools import *
 BERT_HIDDEN_SIZE = 768
 N_SENTIMENT_CLASSES = 5
 
+def load_model(args, device, num_labels):
+    config = SimpleNamespace(
+        hidden_dropout_prob = args.hidden_dropout_prob,
+        hidden_dropout_prob2 = args.hidden_dropout_prob2,
+        hidden_dropout_prob_para = args.hidden_dropout_prob_para,
+        hidden_dropout_prob_sst = args.hidden_dropout_prob_sst,
+        hidden_dropout_prob_sts = args.hidden_dropout_prob_sts,
+        num_labels = num_labels,
+        hidden_size = 768,
+        data_dir = '.',
+        option = args.option,
+        local_files_only = args.local_files_only,
+        attention_module = eval(args.custom_attention)
+    )
 
-class MultitaskBERT(nn.Module):
-    '''
-    This module should use BERT for 3 tasks:
-
-    - Sentiment classification (predict_sentiment)
-    - Paraphrase detection (predict_paraphrase)
-    - Semantic Textual Similarity (predict_similarity)
-    '''
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.bert = load_bert_model(config)
-
-        self.hidden_size = BERT_HIDDEN_SIZE
-        self.num_labels = N_SENTIMENT_CLASSES
-        
-        # see bert.BertModel.embed
-        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
-        
-        # linear sentiment classifier
-        self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
-        
-        # paraphrase classifier
-        # double hidden size do concatenate both sentences
-        self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*2, 1)
-        
-        #cosine similarity classifier
-        self.similarity_classifier = torch.nn.CosineSimilarity()
-
-    @staticmethod
-    def from_config(args, device, num_labels):
-        config = SimpleNamespace(
-            hidden_dropout_prob = args.hidden_dropout_prob,
-            num_labels = num_labels,
-            hidden_size = 768,
-            data_dir = '.',
-            option = args.option,
-            local_files_only = args.local_files_only,
-            attention_module = eval(args.custom_attention)
-        )
-        model = MultitaskBERT(config)
-        model = model.to(device)
-        return model
-
-
-    def forward(self, input_ids, attention_mask):
-        'Takes a batch of sentences and produces embeddings for them.'
-        # The final BERT embedding is the hidden state of [CLS] token (the first token)
-        # Here, you can start by just returning the embeddings straight from BERT.
-        # When thinking of improvements, you can later try modifying this
-        # (e.g., by adding other layers).
-        ### TODO
-        # the same as the first part in classifier.BertSentimentClassifier.forward
-        pooled = self.bert(input_ids, attention_mask)['pooler_output']
-        pooled = self.dropout(pooled)
-        
-        return pooled
-    
-        # raise NotImplementedError
-
-
-    def predict_sentiment(self, input_ids, attention_mask):
-        '''Given a batch of sentences, outputs logits for classifying sentiment.
-        There are 5 sentiment classes:
-        (0 - negative, 1- somewhat negative, 2- neutral, 3- somewhat positive, 4- positive)
-        Thus, your output should contain 5 logits for each sentence.
-        '''
-        ### TODO
-        # the same as in classifier.BertSentimentClassifier.forward        
-        # input embeddings
-        pooled = self.forward(input_ids, attention_mask)     
-        
-        # The class will then classify the sentence by applying dropout on the pooled output
-        #pooled = self.dropout(pooled)
-            
-        # and then projecting it using a linear layer.
-        sentiment_logit = self.sentiment_classifier(pooled)
-
-        
-        return sentiment_logit
-        # raise NotImplementedError
-
-
-    def predict_paraphrase(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
-        '''Given a batch of pairs of sentences, outputs a single logit for predicting whether they are paraphrases.
-        Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
-        during evaluation, and handled as a logit by the appropriate loss function.
-        '''
-        ### TODO
-        # input embeddings
-        pooled_1 = self.forward(input_ids_1, attention_mask_1)
-        pooled_2 = self.forward(input_ids_2, attention_mask_2)
-        
-        # Fernando and Stevenson, 2008
-        # paraphrase is just like similarity
-        # similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1)
-        
-        # cosine_similarity has ouput [-1, 1], so it needs rescaling
-        # Reshape the similarity to fit the input shape of paraphrase_classifier
-        # similarity = similarity.view(-1, 1)  
-       
-        # Generate the logit
-        # paraphrase_logit = self.paraphrase_classifier(similarity)   
-        # Remove the extra dimension added by paraphrase_classifier
-        # paraphrase_logit = paraphrase_logit.view(-1)
-        
-        # Element-wise difference
-        diff = torch.abs(pooled_1 - pooled_2)
-        
-        # Element-wise product
-        prod = pooled_1 * pooled_2
-
-        # Concatenate difference and product
-        pooled = torch.cat([diff, prod], dim=-1)
-        
-        paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
-        
-        return paraphrase_logit
-        # raise NotImplementedError
-
-
-    def predict_similarity(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
-        '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
-        Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
-        during evaluation, and handled as a logit by the appropriate loss function.
-        '''
-        ### TODO
-        # input embeddings
-        pooled_1 = self.forward(input_ids_1, attention_mask_1)
-        pooled_2 = self.forward(input_ids_2, attention_mask_2)
-        
-        # use cosine similarity as in
-        # Agirre et al "SEM 2013 shared task: Semantic Textual Similarity" section 4.2
-        # cosine_similarity has ouput [-1, 1], so it needs rescaling
-        # +1 to get to [0, 2]
-        # /2 to get to [0, 1]
-        # *5 to get [0, 5] like in the dataset
-        #similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
-        similarity = (self.similarity_classifier(pooled_1,pooled_2)+1)*2.5
-        # without scaling
-        # similarity = F.cosine_similarity(pooled_1, pooled_2, dim=1) 
-        
-        return similarity
-        # raise NotImplementedError
-
-
-def load_optimizer(model, args):
-    if args.optimizer == "sophiag":
-        return SophiaG(model.parameters(), lr = args.lr, weight_decay = args.weight_decay,
-                       betas = (0.965, 0.99), rho = 0.01)
+    if args.shared:
+        model = SharedMultitaskBERT(config)
     else:
-        return AdamW(model.parameters(), lr = args.lr, weight_decay = args.weight_decay)
+        model = SmartMultitaskBERT(config)
+
+    #load model trained on para set to continue training mainly on sst and sts set
+    if args.skip_para:
+        saved = torch.load(args.filepath)
+        config = saved['model_config']
+        model = SmartMultitaskBERT(config)
+        model.load_state_dict(saved['model'])
+
+    model = model.to(device)
+    return model
+
+
+def load_optimizers(model, args):
+
+    # optimizer choice 
+    lr = args.lr
+
+    if args.optimizer == "sophiag":
+        #optimizer = SophiaG(model.parameters(), lr=lr,rho=0.03, weight_decay=0.13)
+        if args.para_sep:
+            optimizer_para = SophiaG(model.parameters(), lr=1e-5, betas=(0.959, 0.92), rho = 0.04, weight_decay = 0.25)
+        else: #try different para_optimizer on the last epochs during training on all datasets
+            optimizer_para = SophiaG(model.parameters(), lr=args.lr_para, rho = args.rho_para, weight_decay=args.weight_decay_para)
+        
+        # optimizer_sts = SophiaG(model.parameters(), lr=args.lr_sts, betas=(args.beta1_sts, args.beta2_sts), rho = args.rho_sts, weight_decay=args.weight_decay_sts)
+        optimizer_sst = SophiaG(model.parameters(), lr=args.lr_sst, rho=args.rho_sst, weight_decay = args.weight_decay_sst)
+        optimizer_sts = SophiaG(model.parameters(), lr=args.lr_sts, rho=args.rho_sts, weight_decay = args.weight_decay_sts)
+
+    else:
+        #optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+        #optimizer_para= AdamW(model.parameters(), lr=args.lr_para, weight_decay=args.weight_decay_para)
+        #optimizer_sst= AdamW(model.parameters(), lr=args.lr_sst, betas=(args.beta1_sst, args.beta2_sst), rho = args.rho_sst, weight_decay=args.weight_decay_sst)
+        #optimizer_sts= AdamW(model.parameters(), lr=args.lr_sts, betas=(args.beta1_sts, args.beta2_sts), rho = args.rho_sts, weight_decay=args.weight_decay_sts)
+        optimizer_para = AdamW(model.parameters(), lr=lr)
+        optimizer_sst = AdamW(model.parameters(), lr=lr)
+        optimizer_sts = AdamW(model.parameters(), lr=lr)
+        
+    return optimizer_para, optimizer_sst, optimizer_sts
 
 
 def update_optimizer(optimizer, args, num_batches):
@@ -200,17 +108,33 @@ def update_optimizer(optimizer, args, num_batches):
     optimizer.update_hessian()
 
 
-def train_step_sts_generator(model, dataloaders, optimizer, epoch, args):
+def train_step_sts_generator(model, dataloaders, optimizer, epoch, args, perturbation):
     model.train()
     for i, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels) in enumerate(dataloaders.iter_train_sts(epoch)):
         optimizer.zero_grad(set_to_none=True)
-        similarity = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+        logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2, add_layers=args.add_layers)
+        
+        # SMART
+        if args.smart:
+            adv_loss = perturbation.forward(
+                model=model,
+                logits=logits,
+                input_ids_1=b_ids1,                
+                attention_mask_1=b_mask1,
+                input_ids_2=b_ids2,
+                attention_mask_2=b_mask2,
+                task_id=2,
+                task_type=smart.TaskType.Regression) 
+        else:
+            adv_loss = 0
+        
         # we need a loss function for similarity
         # there are different degrees of similarity
         # So maybe the mean squared error is a suitable loss function for the beginning,
         # since it punishes a prediction that is far away from the truth disproportionately
         # more than a prediction that is close to the truth
         loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
+        loss += adv_loss
         if args.option == "pretrain":
             loss.requires_grad = True
         loss.backward()
@@ -219,39 +143,122 @@ def train_step_sts_generator(model, dataloaders, optimizer, epoch, args):
         update_optimizer(optimizer, args, i)
         yield train_loss
 
-def train_step_sst_generator(model, dataloaders, optimizer, epoch, args):
+def train_step_sst_generator(model, dataloaders, optimizer, epoch, args, perturbation):
     model.train()
     for i, (b_ids, b_mask, b_labels) in enumerate(dataloaders.iter_train_sst(epoch)):
         optimizer.zero_grad(set_to_none=True)
-        logits = model.predict_sentiment(b_ids, b_mask)
-        loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
+        logits = model(b_ids, b_mask, task_id=0,add_layers=args.add_layers)
+        
+        # SMART
+        if args.smart:
+            adv_loss = smart_perturbation_sst.forward(
+                model=model,
+                logits=logits,
+                input_ids_1=b_ids,                
+                attention_mask_1=b_mask,
+                task_id=0,
+                task_type=smart.TaskType.Classification) 
+        else:
+            adv_loss = 0  
+        
+        w = torch.FloatTensor([2.1,1,1.3,1,1.8]).to(device)
+        if args.weights:
+            original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean', weight=w)#,label_smoothing=0.1)
+        else:
+            original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
+        
+        loss = original_loss + adv_loss
         loss.backward()
         optimizer.step()
         train_loss = loss.item()
         update_optimizer(optimizer, args, i)
         yield train_loss
 
-def train_step_para_generator(model, dataloaders, optimizer, epoch, args):
+def train_step_para_generator(model, dataloaders, optimizer, epoch, args, perturbation):
     model.train()
     for i, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels) in enumerate(dataloaders.iter_train_para(epoch)):
         optimizer.zero_grad(set_to_none=True)
-        logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+        logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1, add_layers=args.add_layers)        # we need a loss function that handles logits. maybe this one?
+
+        # SMART
+        if args.smart:
+            adv_loss = smart_perturbation_para.forward(
+                model=model,
+                logits=logits,
+                input_ids_1=b_ids1,                
+                attention_mask_1=b_mask1,
+                input_ids_2=b_ids2,
+                attention_mask_2=b_mask2,
+                task_id=1,
+                task_type=smart.TaskType.Classification) 
+        else:
+            adv_loss = 0
+
         # we need a loss function that handles logits. maybe this one?
         # paraphrasing is a binary task, so binary
         # we get logits, so logits
         # this one also has a sigmoid activation function
-        loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
+        # to balance train data add weights in loss function 
+        #there are roughly 1.66 times more non_paraphrase samples as is_paraphrase samples
+        #thus weight a positive sample with weight 1.66
+        if args.weights:
+            w_p = torch.FloatTensor([1.66]).to(device)
+            original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean', pos_weight=w_p)
+        else: 
+            original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
+        
+        loss = original_loss + adv_loss
         loss.backward()
         optimizer.step()
         train_loss = loss.item()
         update_optimizer(optimizer, args, i)
         yield train_loss
 
+def load_smart_perturbation(args):
+    if not args.smart:
+        return None, None, None
+
+    smart_loss_sst = smart.SymKlCriterion().forward
+    smart_loss_qqp = smart.SymKlCriterion().forward
+    smart_loss_sts = smart.MseCriterion().forward
+    loss_map = {0: smart_loss_sst, 1: smart_loss_qqp, 2: smart_loss_sts}
+    
+    if not args.multi_smart:
+        params_para = dict()
+        params_sst  = dict()
+        params_sts  = dict()
+    else:
+        params_para = dict(
+            epsilon=1.7e-7,
+            step_size=0.0012,
+            noise_var=1.13e-5,
+            norm_p='L2',
+        )
+        params_sst  = dict(
+            epsilon=3.9e-6,
+            step_size=1.1e-4,
+            noise_var=4.2e-6,
+            norm_p='inf',
+        )
+        params_sts  = dict(
+            epsilon=4.4e-7,
+            step_size=2.4e-3,
+            noise_var=1.7e-5,
+            norm_p='L2',
+        )
+
+    perturbation_para = SmartPerturbation(loss_map = loss_map, **params_para)
+    perturbation_sst  = SmartPerturbation(loss_map = loss_map, **params_sst)
+    perturbation_sts  = SmartPerturbation(loss_map = loss_map, **params_sts)
+    return perturbation_para, perturbation_sst, perturbation_sts
+    
+
 def train_multitask(args):
     device      = torch.device('cuda') if args.use_gpu else torch.device('cpu')
     dataloaders = MultitaskDataloader(args, device)
-    model       = MultitaskBERT.from_config(args, device, dataloaders.num_labels)
-    optimizer   = load_optimizer(model, args)
+    model       = load_model(args, device, dataloaders.num_labels)
+    optimizer_para, optimizer_sst, optimizer_sts = load_optimizers(model, args)
+    smart_perturbation_para, smart_perturbation_sst, smart_perturbation_sts = load_smart_perturbation(args)
     writer      = SummaryWriter(comment = args.logdir)
 
     writer.add_hparams({
@@ -270,38 +277,63 @@ def train_multitask(args):
     best_sts_dev_cor = 0
     best_dev_acc = 0
 
+    n_iter = dataloaders.para_train_dataloader_size 
+
     for epoch in range(args.epochs):
         # Mixed training (para), (sst, para), (sts, para, sst)
-        sts_generator = train_step_sts_generator(model, dataloaders, optimizer, epoch, args)
-        sst_generator = train_step_sst_generator(model, dataloaders, optimizer, epoch, args)
-        para_generator = train_step_para_generator(model, dataloaders, optimizer, epoch, args)
+        sts_generator = train_step_sts_generator(model, dataloaders, optimizer_sts, epoch, args, smart_perturbation_sts)
+        sst_generator = train_step_sst_generator(model, dataloaders, optimizer_sst, epoch, args, smart_perturbation_sst)
+        para_generator = train_step_para_generator(model, dataloaders, optimizer_para, epoch, args, smart_perturbation_para)
 
         size_language_training = (dataloaders.para_train_dataloader_size-dataloaders.sst_train_dataloader_size)
         size_language_pretrain = (dataloaders.sst_train_dataloader_size-dataloaders.sts_train_dataloader_size)
         size_language_finetune = dataloaders.sts_train_dataloader_size
 
         sst_loss = 0
+        sst_loss_count = 0
         sts_loss = 0
+        sts_loss_count = 0
         para_loss = 0
+        para_loss_count = 0
 
-        para_loss += sum(islice(para_generator, size_language_training))
-        sst_loss += sum(islice(sst_generator, size_language_pretrain)) 
-        para_loss += sum(islice(para_generator, size_language_pretrain))
+        for loss in islice(para_generator, size_language_training):
+            para_loss += loss
+            para_loss_count += 1
+
+        for loss in islice(sst_generator, size_language_pretrain):
+            sst_loss += loss
+            sst_loss_count += 1
+
+        for loss in islice(para_generator, size_language_pretrain):
+            para_loss += loss
+            para_loss_count += 1
 
         if args.cyclic_finetuning:
             for sts, para, sst in zip(sts_generator, para_generator, sst_generator):
                 sts_loss += sts
+                sts_loss_count += 1
                 para_loss += para
+                para_loss_count += 1
                 sst_loss += sst
+                sst_loss_count += 1
         else:
-            sts_loss += sum(islice(sts_generator, size_language_finetune))
-            para_loss += sum(islice(para_generator, size_language_finetune))
-            sst_loss += sum(islice(sst_generator, size_language_finetune)) 
+            for loss in islice(sts_generator, size_language_finetune):
+                sts_loss += loss
+                sts_loss_count += 1
+            
+            for loss in islice(para_generator, size_language_finetune):
+                para_loss += loss
+                para_loss_count += 1
 
-        sts_loss = sts_loss / dataloaders.sts_train_dataloader_size
-        sst_loss = sst_loss / dataloaders.sst_train_dataloader_size
-        para_loss = para_loss / dataloaders.para_train_dataloader_size
-    
+            for loss in islice(sst_generator, size_language_finetune):
+                sst_loss += loss
+                sst_loss_count += 1 
+
+        # TODO: important!! we sometimes skip values, but we use full size
+        sts_loss = sts_loss / sts_loss_count
+        sst_loss = sst_loss / sst_loss_count
+        para_loss = para_loss / para_loss_count
+
         # tensorboard
         writer.add_scalar("sts/train_loss", sts_loss, epoch)
         print(f"Epoch {epoch}: Semantic Textual Similarity -> train loss: {sts_loss:.3f}")
@@ -310,20 +342,19 @@ def train_multitask(args):
         writer.add_scalar("para/train_loss", para_loss, epoch)
         print(f"Epoch {epoch}: Paraphrase Detection -> train loss: {para_loss:.3f}")
 
-        if args.profiler:
-            break
-
         # evaluation
-        
         (_,train_para_acc, _, _, train_para_prec, train_para_rec, train_para_f1,
          _,train_sst_acc, _, _, train_sst_prec, train_sst_rec, train_sst_f1,
-         _,train_sts_corr, *_ ) = model_eval_multitask(model, device, dataloaders, dev = False)
+         _,train_sts_corr, *_ ) = smart_eval(dataloaders.sst_train_dataloader,
+                                             dataloaders.para_train_dataloader,
+                                             dataloaders.sts_train_dataloader,
+                                             model, device, n_iter)
          
         # tensorboard   
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
         writer.add_scalar("para/train-prec", train_para_prec, epoch)
         writer.add_scalar("para/train-rec", train_para_rec, epoch)
-        writer.add_scalar("para/train-f1", train_para_f1, epoch)
+        writer.add_scalar("para/train-f1", train_para_f1, epoch, n_iter)
         
         writer.add_scalar("sst/train-acc", train_sst_acc, epoch)
         for i, class_precision in enumerate(train_sst_prec):
@@ -337,7 +368,10 @@ def train_multitask(args):
         
         (para_loss,dev_para_acc, _, _, dev_para_prec, dev_para_rec, dev_para_f1,
          sst_loss,dev_sst_acc, _, _, dev_sst_prec, dev_sst_rec, dev_sst_f1,
-         sts_loss,dev_sts_cor, *_ )= model_eval_multitask(model, device, dataloaders, dev = True)        
+         sts_loss,dev_sts_cor, *_ )= smart_eval(sst_dev_dataloader,
+                                                 para_dev_dataloader,
+                                                 sts_dev_dataloader,
+                                                 model, device, n_iter)        
 
         # tensorboard
         writer.add_scalar("para/dev_loss", para_loss, epoch)
@@ -379,23 +413,25 @@ def train_multitask(args):
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
             #writer.add_hparams()
-            save_model(model, optimizer, args, model.config, args.filepath)
+            save_model(model, optimizer_para, args, model.config, args.filepath)
           
         # save each epoch of the trained model for detailed error analysis
         if  args.save:
             save_path = f'Models/epoch-{epoch}-{args.option}-{args.custom_attention}-{args.lr}-multitask.pt'
-            save_model(model, optimizer, args, model.config, save_path)
+            save_model(model, optimizer_para, args, model.config, save_path)
 
-        # cool down GPU    
+        # cool down GPU
         if epoch %10 ==9:
             time.sleep(60*5)                     
         
     # tensorboard
     # collect all information of run    
-    writer.add_hparams({"epochs":args.epochs,
+    writer.add_hparams({"comment": args.comment,
+                        "epochs":args.epochs,
                         "optimizer":args.optimizer, 
-                        "lr":args.lr, 
-                        "weight_decay":args.weight_decay,
+                        "SMART":args.smart,
+                        "lr":args.lr_para, 
+                        "weight_decay_para":args.weight_decay_para,
                         "k_for_sophia":args.k_for_sophia,
                         "hidden_dropout_prob": args.hidden_dropout_prob,
                         "batch_size":args.batch_size,
@@ -408,20 +444,19 @@ def train_multitask(args):
     writer.flush()
     writer.close()
 
-    
 def test_model(args):
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
         saved = torch.load(args.filepath)
         config = saved['model_config']
 
-        model = MultitaskBERT(config)
+        model = SmartMultitaskBERT(config)
         model.load_state_dict(saved['model'])
         model = model.to(device)
         print(f"Loaded model to test from {args.filepath}")
 
-        test_model_multitask(args, model, device)
-
+        para_acc,sst_acc,sts_cor,embed,labels = test_model_multitask(args, model, device)
+    return model,para_acc,sst_acc,sts_cor,embed,labels
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -438,10 +473,10 @@ def get_args():
     parser.add_argument("--sts_test", type=str, default="data/sts-test-student.csv")
 
     parser.add_argument("--seed", type=int, default=11711)
-    parser.add_argument("--epochs", type=int, default=6)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
-                        choices=('pretrain', 'finetune'), default="pretrain")
+                        choices=('pretrain', 'finetune'), default="finetune")
     parser.add_argument("--use_gpu", action='store_true')
 
     parser.add_argument("--sst_dev_out", type=str, default="predictions/sst-dev-output.csv")
@@ -459,30 +494,73 @@ def get_args():
     parser.add_argument("--num_batches_sst", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
     parser.add_argument("--num_batches_sts", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
     
-    parser.add_argument("--hidden_dropout_prob", type=float, default=0.3)
+    parser.add_argument("--hidden_dropout_prob", type=float, default=0.0)
+    parser.add_argument("--hidden_dropout_prob_para", type=float, default=0.2)
+    parser.add_argument("--hidden_dropout_prob_sst", type=float, default=0.26)
+    parser.add_argument("--hidden_dropout_prob_sts", type=float, default=0.27)
+    parser.add_argument("--hidden_dropout_prob2", type=float, default=None)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
-                        default=1e-3)
+                        default=1e-5)
+    parser.add_argument("--lr_para", type=float,default=1.1e-5)
+    parser.add_argument("--lr_sst", type=float,default=6.2e-6)
+    parser.add_argument("--lr_sts", type=float,default=1.3e-5)
     parser.add_argument("--local_files_only", action='store_true', default = True),
-    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw"),
-    parser.add_argument("--weight_decay", help="default for 'adamw': 0.01", type=float, default=0),
-    parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10),
+    # optimizer
+    #default parameters are from the hyperparameter tuning with optuna
+    parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="adamw")
+    parser.add_argument("--weight_decay_para", help="default for 'adamw': 0.01", type=float, default=0.16)
+    parser.add_argument("--weight_decay_sst", help="default for 'adamw': 0.01", type=float, default=0.11)
+    parser.add_argument("--weight_decay_sts", help="default for 'adamw': 0.01", type=float, default=0.15)
+    parser.add_argument("--beta1_para", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.969)
+    parser.add_argument("--beta1_sst", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.968)
+    parser.add_argument("--beta1_sts", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.934)
+    parser.add_argument("--beta2_para", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.95)
+    parser.add_argument("--beta2_sst", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.93)
+    parser.add_argument("--beta2_sts", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.97)
+    parser.add_argument("--rho_para", help="rho parameter of sophia optimizer",type=float,default=0.019)
+    parser.add_argument("--rho_sst", help="rho parameter of sophia optimizer",type=float,default=0.033)
+    parser.add_argument("--rho_sts", help="rho parameter of sophia optimizer",type=float,default=0.015)
+    
+    parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)    
+    # tensorboard    
+    parser.add_argument("--logdir", type=str, default='')
+    parser.add_argument("--comment", type=str, default="")
     parser.add_argument("--profiler", action="store_true")
     parser.add_argument("--custom_attention", type=str, choices = CUSTOM_ATTENTION_CHOICES,
                         help="Which custom attention should be used?", default = "BertSelfAttention")
-    
-    parser.add_argument("--save", type=bool, default=True)
-    parser.add_argument("--logdir", type=str, default='')
     parser.add_argument("--cyclic_finetuning", type=bool, default=False)
+    parser.add_argument("--shared", action="store_true") # shared model
+    parser.add_argument("--smart", action="store_true") # SMART
+    parser.add_argument("--multi_smart", help="if True every task uses different smart parameters during training", type=bool, default=False) 
+    parser.add_argument("--para_sep", help="if True model is  only trained on para data set", type=bool, default=False) 
+    parser.add_argument("--skip_para", help="if True model is only trained on sst and sts data set", type=bool, default=False) 
+    parser.add_argument("--weights", help="balance loss function with weights in para and sst", type=bool, default=False)
+    parser.add_argument("--add_layers", help="add additional layers in model.predict_para/sts/sst", type=bool, default=False)
+    parser.add_argument("--save", type=bool, default=False)
     
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'Models/{args.option}-{args.custom_attention}-{args.lr}-multitask.pt' # save path for model
-    seed_everything(args.seed)  # fix the seed for reproducibility    
-    
-    train_multitask(args)
+    args.filepath = f'Models/{args.optimizer}-{args.custom_attention}-para_sep-{args.para_sep}-weights-{args.weights}-onelayer-{args.add_layers}-multitask.pt' # save path for model
+    seed_everything(args.seed)  # fix the seed for reproducibility 
+    if args.smart:
+        args.comment = "smart"
+        train_multitask(args)
+    elif args.para_sep:
+        args.comment = "para_only"+"_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
+        train_multitask(args)
+        args.skip_para = True
+        args.epochs = 20
+        args.comment = "para_skip""_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
+        args.para_sep = False
+        train_multitask(args)
+    elif args.optimizer == "sophiag":
+        args.comment = "sophia"
+        train_multitask(args)
+    elif args.optimizer == "adamw":
+        train_multitask(args)
 
     if not args.profiler:
         test_model(args)

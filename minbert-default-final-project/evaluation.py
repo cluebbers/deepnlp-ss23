@@ -69,8 +69,11 @@ def model_eval_multitask(model, device, dataloaders, dev):
         # Evaluate paraphrase detection.
         for step, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels, b_sent_ids) in enumerate(dataloaders.iter_eval_para(dev)):
 
-            logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
-
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
+            #logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+            
+            #dev_loss 
+            
             loss = F.binary_cross_entropy_with_logits(logits, b_labels.float(), reduction='mean')
             para_loss += loss.item()
             num_batches+=1
@@ -100,13 +103,12 @@ def model_eval_multitask(model, device, dataloaders, dev):
         # Evaluate semantic textual similarity. (sts)
         for step, (b_ids1, b_mask1, b_ids2, b_mask2, b_labels, b_sent_ids) in enumerate(dataloaders.iter_eval_sts(dev)):
 
-            logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
             
             #dev loss
             loss = F.mse_loss(logits, b_labels.float(), reduction='mean')
             sts_loss += loss.item()
-            num_batches+=1
-            
+            num_batches+=1            
             y_hat = logits.flatten().cpu().numpy()
             b_labels = b_labels.flatten().cpu().numpy()
 
@@ -127,9 +129,17 @@ def model_eval_multitask(model, device, dataloaders, dev):
         num_batches = 0
 
         # Evaluate sentiment classification. (sst)
+        embed = torch.empty(64,768).to(device) #bert embeddings of the sentences, return them for error-analysis
+        labels = torch.empty(64).to(device) #labels of the sentences
         for step, (b_ids, b_mask, b_labels, b_sent_ids) in enumerate(dataloaders.iter_eval_sst(dev)):
-
-            logits = model.predict_sentiment(b_ids, b_mask)
+        
+            if num_batches <8: #collect bert_embbedings of the first batches
+                embed_new = model.bert(b_ids, b_mask)['pooler_output']
+                embed = torch.cat([embed,embed_new])
+                labels = torch.cat([labels,b_labels])
+            
+            logits = model(b_ids, b_mask, task_id=0)
+            #logits = model.predict_sentiment(b_ids, b_mask)
             
             #Dev loss
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
@@ -142,8 +152,8 @@ def model_eval_multitask(model, device, dataloaders, dev):
             sst_y_pred.extend(y_hat)
             sst_y_true.extend(b_labels)
             sst_sent_ids.extend(b_sent_ids)
-            
-        sst_loss = sst_loss/num_batches #normalize loss
+
+        sst_loss = sst_loss/ num_batches #normalize loss
 
         # sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
         sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
@@ -157,7 +167,7 @@ def model_eval_multitask(model, device, dataloaders, dev):
 
         return (para_loss,paraphrase_accuracy, para_y_pred, para_sent_ids, paraphrase_precision, paraphrase_recall, paraphrase_f1, 
                 sst_loss,sentiment_accuracy,sst_y_pred, sst_sent_ids, sentiment_precision, sentiment_recall, sentiment_f1,
-                sts_loss,sts_corr, sts_y_pred, sts_sent_ids)
+                sts_loss,sts_corr, sts_y_pred, sts_sent_ids,embed,labels)
 
 # Perform model evaluation in terms by averaging accuracies across tasks.
 def model_eval_test_multitask(sentiment_dataloader,
@@ -183,7 +193,8 @@ def model_eval_test_multitask(sentiment_dataloader,
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
 
-            logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
+            #logits = model.predict_paraphrase(b_ids1, b_mask1, b_ids2, b_mask2)
             y_hat = logits.sigmoid().round().flatten().cpu().numpy()
 
             para_y_pred.extend(y_hat)
@@ -207,7 +218,8 @@ def model_eval_test_multitask(sentiment_dataloader,
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
 
-            logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 2)
+            #logits = model.predict_similarity(b_ids1, b_mask1, b_ids2, b_mask2)
             y_hat = logits.flatten().cpu().numpy()
 
             sts_y_pred.extend(y_hat)
@@ -223,8 +235,9 @@ def model_eval_test_multitask(sentiment_dataloader,
 
             b_ids = b_ids.to(device)
             b_mask = b_mask.to(device)
-
-            logits = model.predict_sentiment(b_ids, b_mask)
+            
+            logits = model(b_ids, b_mask, task_id=0)
+            #logits = model.predict_sentiment(b_ids, b_mask)
             y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
 
             sst_y_pred.extend(y_hat)
@@ -278,7 +291,236 @@ def test_model_multitask(args, model, device):
         for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
             f.write(f"{p},{s}\n")
 
-    with open(args.sts_test_out, "w+") as f:
-        f.write(f"id,Predicted_Similiary \n")
-        for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
-            f.write(f"{p},{s}\n")
+    return dev_paraphrase_accuracy,dev_sentiment_accuracy,dev_sts_corr, embed,labels
+
+
+def optuna_eval(sentiment_dataloader,
+                         paraphrase_dataloader,
+                         sts_dataloader,
+                         model, device, n_iter):
+    model.eval()  # switch to eval model, will turn off randomness like dropout
+    
+    with torch.no_grad():
+        # Evaluate paraphrase detection. qqp
+        para_y_true = []
+        para_y_pred = []        
+        num_batches = 0
+        
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval-para', disable=False)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_labels) = (batch['token_ids_1'], batch['attention_mask_1'],
+                                      batch['token_ids_2'], batch['attention_mask_2'],
+                                      batch['labels'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
+
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=1)   
+            y_hat = logits.sigmoid().round().flatten().cpu().numpy()
+            b_labels = b_labels.flatten().cpu().numpy()
+
+            para_y_pred.extend(y_hat)
+            para_y_true.extend(b_labels)
+            
+            num_batches +=1
+            if num_batches >= n_iter:
+                break  
+
+        paraphrase_accuracy = accuracy_score(para_y_true, para_y_pred)
+        
+        # Evaluate semantic textual similarity. (sts)
+        sts_y_true = []
+        sts_y_pred = []
+        
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval-sts', disable=False)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_labels) = (batch['token_ids_1'], batch['attention_mask_1'],
+                          batch['token_ids_2'], batch['attention_mask_2'],
+                          batch['labels'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
+
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
+
+            y_hat = logits.flatten().cpu().numpy()
+            b_labels = b_labels.flatten().cpu().numpy()
+
+            sts_y_pred.extend(y_hat)
+            sts_y_true.extend(b_labels)
+            
+        pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
+        sts_corr = pearson_mat[1][0]
+            
+        # Evaluate sentiment classification. (sst)
+        sst_y_true = []
+        sst_y_pred = []
+        
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval-sst', disable=False)):
+            b_ids, b_mask, b_labels = batch['token_ids'], batch['attention_mask'], batch['labels']
+
+            b_ids = b_ids.to(device)
+            b_mask = b_mask.to(device)
+            b_labels = b_labels.to(device)
+
+            logits = logits = model(b_ids, b_mask, task_id=0)
+ 
+            y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
+            b_labels = b_labels.flatten().cpu().numpy()
+
+            sst_y_pred.extend(y_hat)
+            sst_y_true.extend(b_labels)  
+            
+        sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
+
+        return (paraphrase_accuracy, sts_corr, sentiment_accuracy)
+    
+def smart_eval(sentiment_dataloader,
+                         paraphrase_dataloader,
+                         sts_dataloader,
+                         model, device, n_iter):
+    model.eval()  # switch to eval model, will turn off randomness like dropout
+
+    with torch.no_grad():
+        para_y_true = []
+        para_y_pred = []
+        para_sent_ids = []
+        para_loss = 0
+        num_batches = 0
+
+        # Evaluate paraphrase detection. qqp
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval-para', disable=TQDM_DISABLE)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                          batch['token_ids_2'], batch['attention_mask_2'],
+                          batch['labels'], batch['sent_ids'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
+
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=1)
+            
+            #dev_loss             
+            loss = F.binary_cross_entropy_with_logits(logits, b_labels.float(), reduction='mean')
+            para_loss += loss.item()
+            num_batches+=1            
+            
+            y_hat = logits.sigmoid().round().flatten().cpu().numpy()
+            b_labels = b_labels.flatten().cpu().numpy()
+
+            para_y_pred.extend(y_hat)
+            para_y_true.extend(b_labels)
+            para_sent_ids.extend(b_sent_ids)
+            
+            if num_batches >= n_iter:
+                break  
+
+        para_loss = para_loss/num_batches #normalize loss
+
+        # paraphrase_accuracy = np.mean(np.array(para_y_pred) == np.array(para_y_true))
+        paraphrase_accuracy = accuracy_score(para_y_true, para_y_pred)
+        paraphrase_precision = precision_score(para_y_true, para_y_pred, average="binary")
+        paraphrase_recall = recall_score(para_y_true, para_y_pred, average="binary")
+        paraphrase_f1 = f1_score(para_y_true, para_y_pred, average="binary")
+
+        sts_y_true = []
+        sts_y_pred = []
+        sts_sent_ids = []
+        sts_loss = 0
+        num_batches = 0
+
+        # Evaluate semantic textual similarity. (sts)
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval-sts', disable=TQDM_DISABLE)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_labels, b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                          batch['token_ids_2'], batch['attention_mask_2'],
+                          batch['labels'], batch['sent_ids'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            b_labels = b_labels.to(device)
+
+            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
+            
+            #dev loss
+            loss = F.mse_loss(logits, b_labels.float(), reduction='mean')
+            sts_loss += loss.item()
+            num_batches+=1
+            
+            y_hat = logits.flatten().cpu().numpy()
+            b_labels = b_labels.flatten().cpu().numpy()
+
+            sts_y_pred.extend(y_hat)
+            sts_y_true.extend(b_labels)
+            sts_sent_ids.extend(b_sent_ids)
+            
+            if num_batches >= n_iter:
+                break  
+            
+        sts_loss = sts_loss/num_batches #normalize sts_loss
+        
+        pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
+        sts_corr = pearson_mat[1][0]
+
+
+        sst_y_true = []
+        sst_y_pred = []
+        sst_sent_ids = []
+        sst_loss = 0
+        num_batches = 0
+
+        # Evaluate sentiment classification. (sst)
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval-sst', disable=TQDM_DISABLE)):
+            b_ids, b_mask, b_labels, b_sent_ids = batch['token_ids'], batch['attention_mask'], batch['labels'], batch['sent_ids']
+
+            b_ids = b_ids.to(device)
+            b_mask = b_mask.to(device)
+            b_labels = b_labels.to(device)
+
+            logits = logits = model(b_ids, b_mask, task_id=0)
+            
+            #Dev loss
+            loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
+            sst_loss += loss.item()
+            num_batches+=1
+            
+            y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
+            b_labels = b_labels.flatten().cpu().numpy()
+
+            sst_y_pred.extend(y_hat)
+            sst_y_true.extend(b_labels)
+            sst_sent_ids.extend(b_sent_ids) 
+            
+            if num_batches >= n_iter:
+                break   
+            
+        sst_loss = sst_loss/num_batches #normalize loss
+
+        # sentiment_accuracy = np.mean(np.array(sst_y_pred) == np.array(sst_y_true))
+        sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
+        sentiment_precision = precision_score(sst_y_true, sst_y_pred, average=None)
+        sentiment_recall = recall_score(sst_y_true, sst_y_pred, average=None)
+        sentiment_f1 = f1_score(sst_y_true, sst_y_pred, average=None)
+
+        print(f'Paraphrase detection accuracy: {paraphrase_accuracy:.3f}')
+        print(f'Sentiment classification accuracy: {sentiment_accuracy:.3f}')
+        print(f'Semantic Textual Similarity correlation: {sts_corr:.3f}')
+
+        return (para_loss,paraphrase_accuracy, para_y_pred, para_sent_ids, paraphrase_precision, paraphrase_recall, paraphrase_f1, 
+                sst_loss,sentiment_accuracy,sst_y_pred, sst_sent_ids, sentiment_precision, sentiment_recall, sentiment_f1,
+                sts_loss,sts_corr, sts_y_pred, sts_sent_ids)

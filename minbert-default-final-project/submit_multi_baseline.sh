@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=train-multi-base
-#SBATCH -t 05:00:00                  # estimated time # TODO: adapt to your needs
+#SBATCH --job-name=multi-baseline
+#SBATCH -t 12:00:00                  # estimated time # TODO: adapt to your needs
 #SBATCH -p grete:shared              # the partition you are training on (i.e., which nodes), for nodes see sinfo -p grete:shared --format=%N,%G
 #SBATCH -G A100:1                   # take 1 GPU, see https://www.hlrn.de/doc/display/PUB/GPU+Usage for more options
 #SBATCH --mem-per-gpu=5G             # setting the right constraints for the splitted gpu partitions
@@ -14,7 +14,7 @@
 
 module load anaconda3
 module load cuda
-source activate dnlp-gwdg # Or whatever you called your environment.
+source activate dl-gpu # Or whatever you called your environment.
 
 # Printing out some info.
 echo "Submitting job with sbatch from directory: ${SLURM_SUBMIT_DIR}"
@@ -28,7 +28,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Run the script:
-python -u multiclass_classifier.py --use_gpu --option finetune --lr 1e-5
+python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --batch_size 64 --comment "baseline" --epochs 30
 
 # Run the script with logger:
 #python -u train_with_logger.py -l ~/${SLURM_JOB_NAME}_${SLURM_JOB_ID}  -t True -p True -d True -s True -f True
