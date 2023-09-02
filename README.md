@@ -392,17 +392,19 @@ You can download pretrained models in the original [Project repository](https://
 
 ## Results
 
-Our model achieves the following performance on :
-
-### Sentiment Analysis on Stanford Sentiment Treebank (SST)
-### Paraphrase Detection on Quora Dataset (QPQ)
-
-### Semantic Textual Similarity on SemEval STS Benchmark (STS)
+Our model achieves the following performance:
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | ---
-| Baseline                                     |   51% |   85% |   52% |
+| ------------------ |---------------- | -------------- | -------------- |
 | State-of-the-Art                             | 59.8% | 90.7% |   93% |
+| Baseline_1  |     51.14 %         |      85.23 %       | 52.15 % |
+| Baseline_2 |     51.41 %         |      77. 32 %       | 43.35 %  |
+| Sophia Baseline|     36.69 %         |      80.81 %       | 44.67 % |
+| Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
+| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
+| SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
+| Shared Similarity |     50.14 %         |      71.08 %       | 47.68 % |
+| Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
 | BertSelfAttention (no augmentation)          | 44.6% | 77.2% | 48.3% |
 | ReorderedTraining (BertSelfAttention)        | 45.9% | 79.3% | 49.8% |
 | RoundRobinTraining (BertSelfAttention)       | 45.5% | 77.5% | 50.3% |
@@ -421,18 +423,11 @@ Our model achieves the following performance on :
 
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
-## Remaining not tested ideas
+## Future work
    - Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task. 
-
-| State-of-the-Art  |     59.8 %         |      90.7%       | 93%  |
-| Baseline_1  |     51.14 %         |      85.23 %       | 52.15 % |
-| Baseline_2 |     51.41 %         |      77. 32 %       | 43.35 %  |
-| Sophia Baseline|     36.69 %         |      80.81 %       | 44.67 % |
-| Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
-| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
-| SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
-| Shared Similarity |     50.14 %         |      71.08 %       | 47.68 % |
-| Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
+- give other losses different weights. 
+- with or without combined losses. 
+- maybe based in dev_acc performance in previous epoch.
 
 Here is the course [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0).
 
@@ -450,10 +445,3 @@ Lübbers, Christopher L.: Part 1 complete; Part 2: Multitask classifier, Tensorb
 Niegsch, Luaks*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
 Schmidt, Finn Paul:
-
-Thorns, Celine:
-## Future work
-
-give other losses different weights. 
-with or without combined losses. 
-maybe based in dev_acc performance in previous epoch.
