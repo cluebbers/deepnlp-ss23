@@ -299,14 +299,14 @@ Tensorboard: Aug25_09-53-27_ggpu137shared
 
 ### Custom Attention
 [Generalisations on Custom Attention](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/11#tab-issues)
-    - At this Station we are considering/trying three ideas of Generalisations by hyperparameters on the Bert-Self-Attention (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/54))
-    - Although the idea of envolving more hyperparameters, should improve the result, however because of overfitting we are getting even a bit lower accuracy.
-    - Sparessmax (paper) : (https://arxiv.org/abs/1602.02068v2).
+ - At this Station we are considering/trying three ideas of Generalisations by hyperparameters on the Bert-Self-Attention (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/54))
+ - Although the idea of envolving more hyperparameters, should improve the result, however because of overfitting we are getting even a bit lower accuracy.
+- Sparessmax (paper) : (https://arxiv.org/abs/1602.02068v2).
 
 ### Splitted and reordered batches
 [Splitted and reordererd batches](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/12#tab-issues)
-    - At this Step we are considring a specific order of batches by splitting the the datasets and put them in a specific order, (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/59)).
-    - The idea works. We recieve at least 1% more accurcy at each task.   
+ - At this Step we are considring a specific order of batches by splitting the the datasets and put them in a specific order, (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/59)).
+- The idea works. We recieve at least 1% more accurcy at each task.   
 ### Combined Loss
 
 This could work as a kind of regularization, because it is not training on a single task and overfitting, but it uses all losses to optimize. 
