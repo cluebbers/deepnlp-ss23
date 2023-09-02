@@ -9,8 +9,8 @@ to train your model.
 
 
 import csv
-
 import torch
+import numpy as np
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from tokenizer import BertTokenizer
