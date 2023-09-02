@@ -463,7 +463,8 @@ def optuna_eval(sentiment_dataloader,
 def smart_eval(sentiment_dataloader,
                          paraphrase_dataloader,
                          sts_dataloader,
-                         model, device, n_iter):
+                         model, device, n_iter,one_embed=False,add_layers=False):
+    #if one_embed is true, the prediction on para and sts is a bit different
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
@@ -486,8 +487,13 @@ def smart_eval(sentiment_dataloader,
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
-
-            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=1)
+            
+            if one_embed:
+                b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                logits = model(b_ids, b_mask, task_id = 1,add_layers=add_layers)
+            else:
+                logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=1,add_layers=add_layers)
             
             #dev_loss             
             loss = F.binary_cross_entropy_with_logits(logits, b_labels.float(), reduction='mean')
@@ -531,15 +537,32 @@ def smart_eval(sentiment_dataloader,
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
-
-            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
+            
+            if one_embed:
+                b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                #logits are unnormalized probabilities, the more negative a logit is the lower the similarity prediction of the model is
+                logits = model(b_ids, b_mask, task_id = 2,add_layers=add_layers)
+    
+            else:
+                similarity = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2, add_layers=add_layers)
             
             #dev loss
-            loss = F.mse_loss(logits, b_labels.float(), reduction='mean')
+            if one_embed:
+                # since similarity is between (0,5) the labels have to be normalized for the cross entropy such that
+                # similarity is in (0,5)*0.2=(0,1)
+                loss = F.binary_cross_entropy_with_logits(logits, b_labels*0.2)
+            else:
+                loss = F.mse_loss(similarity, b_labels.float(), reduction='mean')
+                
             sts_loss += loss.item()
             num_batches+=1
             
-            y_hat = logits.flatten().cpu().numpy()
+            if one_embed:
+                y_hat = logits.sigmoid().flatten().cpu().numpy()*5 #unnormalize predictions after passing them through sigmoid function
+            else:
+                y_hat = similarity.flatten().cpu().numpy()
+            
             b_labels = b_labels.flatten().cpu().numpy()
 
             sts_y_pred.extend(y_hat)
@@ -569,7 +592,7 @@ def smart_eval(sentiment_dataloader,
             b_mask = b_mask.to(device)
             b_labels = b_labels.to(device)
 
-            logits = logits = model(b_ids, b_mask, task_id=0)
+            logits = logits = model(b_ids, b_mask, task_id=0, add_layers = add_layers)
             
             #Dev loss
             loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')

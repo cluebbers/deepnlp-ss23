@@ -65,8 +65,8 @@ def train_multitask(args):
     para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
                                     collate_fn=para_dev_data.collate_fn)
     # similarity
-    sts_train_data = SentencePairDataset(sts_train_data, args)
-    sts_dev_data = SentencePairDataset(sts_dev_data, args)
+    sts_train_data = SentencePairDataset(sts_train_data, args,isRegression =True)
+    sts_dev_data = SentencePairDataset(sts_dev_data, args,isRegression =True)
     
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
                                       collate_fn=sts_train_data.collate_fn)
@@ -75,10 +75,6 @@ def train_multitask(args):
     # CLL end
 
     # Init model
-    if args.para_sep:
-        dropout_para = 0.056 #found in hyperparameter tuning for only para 
-    else:
-        dropout_para = args.hidden_dropout_prob_para
     
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'hidden_dropout_prob2': args.hidden_dropout_prob2,
@@ -100,7 +96,8 @@ def train_multitask(args):
     else:
         model = SmartMultitaskBERT(config)
     
-    if args.skip_para: #load model trained on para set to continue training mainly on sst and sts set
+    if args.skip_para or args.option == 'pretrain': #load model trained on para set to continue training mainly on sst and sts set
+        print(args.option)
         saved = torch.load(args.filepath)
         config = saved['model_config']
         model = SmartMultitaskBERT(config)
@@ -113,33 +110,27 @@ def train_multitask(args):
     #weight_decay = args.weight_decay
 
     if args.optimizer == "sophiag":
-        #optimizer = SophiaG(model.parameters(), lr=lr,rho=0.03, weight_decay=0.13)
-        if args.para_sep:
+        if args.para_sep: # those parameters where found with an optuna study for the para dataset
             optimizer_para= SophiaG(model.parameters(), lr=1e-5, betas=(0.959, 0.92), rho = 0.04, weight_decay=0.25)
         else: #try different para_optimizer on the last epochs during training on all datasets
             optimizer_para= SophiaG(model.parameters(), lr=args.lr_para, rho = args.rho_para, weight_decay=args.weight_decay_para)
-        
-        
-        optimizer_sts= SophiaG(model.parameters(), lr=args.lr_sts, betas=(args.beta1_sts, args.beta2_sts), rho = args.rho_sts, weight_decay=args.weight_decay_sts)
+    
         optimizer_sst = SophiaG(model.parameters(), lr=args.lr_sst,rho=args.rho_sst, weight_decay=args.weight_decay_sst)
         optimizer_sts = SophiaG(model.parameters(), lr=args.lr_sts,rho=args.rho_sts, weight_decay=args.weight_decay_sts)
         #how often to update the hessian?
         k = args.k_for_sophia
+        
     else:
-        #optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-        #optimizer_para= AdamW(model.parameters(), lr=args.lr_para, weight_decay=args.weight_decay_para)
-        #optimizer_sst= AdamW(model.parameters(), lr=args.lr_sst, betas=(args.beta1_sst, args.beta2_sst), rho = args.rho_sst, weight_decay=args.weight_decay_sst)
-        #optimizer_sts= AdamW(model.parameters(), lr=args.lr_sts, betas=(args.beta1_sts, args.beta2_sts), rho = args.rho_sts, weight_decay=args.weight_decay_sts)
-        optimizer_para = AdamW(model.parameters(), lr=lr)
-        optimizer_sst = AdamW(model.parameters(), lr=lr)
-        optimizer_sts = AdamW(model.parameters(), lr=lr)
+        optimizer_para = AdamW(model.parameters(), lr=args.lr_para,weight_decay=args.weight_decay_para)
+        optimizer_sst = AdamW(model.parameters(), lr=args.lr_sst,weight_decay=args.weight_decay_sst)
+        optimizer_sts = AdamW(model.parameters(), lr=args.lr_sts,weight_decay=args.weight_decay_sts)
         
     # SMART    
     if args.smart:
         smart_loss_sst = smart.SymKlCriterion().forward
         smart_loss_qqp = smart.SymKlCriterion().forward
         smart_loss_sts = smart.MseCriterion().forward
-        if args.multi_smart:
+        if args.multi_smart: #those values are from an optuna study on smart
             smart_perturbation_para = SmartPerturbation(epsilon=1.7e-7,
                                                    step_size=0.0012,
                                                    noise_var=1.13e-5,
@@ -214,9 +205,16 @@ def train_multitask(args):
             b_ids2 = b_ids2.to(device)
             b_mask2 = b_mask2.to(device)
             b_labels = b_labels.to(device)
-
+            
             optimizer_para.zero_grad()
-            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1,add_layers=args.add_layers)
+            
+            if args.one_embed:
+                b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                logits = model(b_ids, b_mask, task_id = 1,add_layers= args.add_layers)
+            
+            else:
+                logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1,add_layers= args.add_layers)
             
             # SMART
             if args.smart:
@@ -311,7 +309,16 @@ def train_multitask(args):
             b_labels = b_labels.to(device)
 
             optimizer_sts.zero_grad(set_to_none=True)
-            logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2,add_layers=args.add_layers)
+            
+            if args.one_embed:
+                b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                #logits are unnormalized probabilities, the more negative a logit is the lower the similarity prediction of the model is
+                logits = model(b_ids, b_mask, task_id = 2,add_layers= args.add_layers)
+    
+            else:
+                #return cosine similarity between two embeddings
+                similarity = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2,add_layers=args.add_layers)
             
             # SMART
             if args.smart:
@@ -332,12 +339,17 @@ def train_multitask(args):
             # So maybe the mean squared error is a suitable loss function for the beginning,
             # since it punishes a prediction that is far away from the truth disproportionately
             # more than a prediction that is close to the truth
+            if args.one_embed:
+                # since similarity is between (0,5) the labels have to be normalized for the cross entropy such that
+                # similarity is in (0,5)*0.2=(0,1)
+                original_loss = F.binary_cross_entropy_with_logits(logits, b_labels*0.2)
+            else:
+                original_loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
             
-            original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
             loss = original_loss + adv_loss          
                 
-            if args.option == "pretrain":
-                loss.requires_grad = True
+            #if args.option == "pretrain":
+                #loss.requires_grad = True
             loss.backward()
             optimizer_sts.step()
 
@@ -550,7 +562,7 @@ def train_multitask(args):
          _,train_sts_corr, *_ )= smart_eval(sst_train_dataloader,
                                                     para_train_dataloader,
                                                     sts_train_dataloader,
-                                                    model, device, n_iter)
+                                                    model, device, n_iter,one_embed=args.one_embed, add_layers = args.add_layers)
          
         # tensorboard   
         writer.add_scalar("para/train-acc", train_para_acc, epoch)
@@ -573,7 +585,7 @@ def train_multitask(args):
          sts_loss,dev_sts_cor, *_ )= smart_eval(sst_dev_dataloader,
                                                  para_dev_dataloader,
                                                  sts_dev_dataloader,
-                                                 model, device, n_iter)        
+                                                 model, device, n_iter,one_embed=args.one_embed,add_layers = args.add_layers)        
 
         # tensorboard
         writer.add_scalar("para/dev_loss", para_loss, epoch)
@@ -695,31 +707,31 @@ def get_args():
     parser.add_argument("--num_batches_sts", help='sst: 64 can fit a 12GB GPU', type=int, default=float('nan'))
     
     parser.add_argument("--hidden_dropout_prob", type=float, default=0.0)
-    parser.add_argument("--hidden_dropout_prob_para", type=float, default=0.2)
-    parser.add_argument("--hidden_dropout_prob_sst", type=float, default=0.26)
-    parser.add_argument("--hidden_dropout_prob_sts", type=float, default=0.27)
+    parser.add_argument("--hidden_dropout_prob_para", type=float, default=0)
+    parser.add_argument("--hidden_dropout_prob_sst", type=float, default=0)
+    parser.add_argument("--hidden_dropout_prob_sts", type=float, default=0)
     parser.add_argument("--hidden_dropout_prob2", type=float, default=None)
     parser.add_argument("--lr", type=float, help="learning rate, default lr for 'pretrain': 1e-3, 'finetune': 1e-5",
                         default=1e-5)
-    parser.add_argument("--lr_para", type=float,default=1.1e-5)
-    parser.add_argument("--lr_sst", type=float,default=6.2e-6)
-    parser.add_argument("--lr_sts", type=float,default=1.3e-5)
+    parser.add_argument("--lr_para", type=float,default=1e-5)
+    parser.add_argument("--lr_sst", type=float,default=1e-5)
+    parser.add_argument("--lr_sts", type=float,default=1e-5)
     parser.add_argument("--local_files_only", action='store_true', default = True),
     # optimizer
-    #default parameters are from the hyperparameter tuning with optuna
+    # default parameters are from the sophia optimizer papaer
     parser.add_argument("--optimizer", type=str, help="adamw or sophiag", choices=("adamw", "sophiag"), default="sophiag")
-    parser.add_argument("--weight_decay_para", help="default for 'adamw': 0.01", type=float, default=0.16)
-    parser.add_argument("--weight_decay_sst", help="default for 'adamw': 0.01", type=float, default=0.11)
-    parser.add_argument("--weight_decay_sts", help="default for 'adamw': 0.01", type=float, default=0.15)
-    parser.add_argument("--beta1_para", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.969)
-    parser.add_argument("--beta1_sst", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.968)
-    parser.add_argument("--beta1_sts", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.934)
-    parser.add_argument("--beta2_para", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.95)
-    parser.add_argument("--beta2_sst", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.93)
-    parser.add_argument("--beta2_sts", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.97)
-    parser.add_argument("--rho_para", help="rho parameter of sophia optimizer",type=float,default=0.019)
-    parser.add_argument("--rho_sst", help="rho parameter of sophia optimizer",type=float,default=0.033)
-    parser.add_argument("--rho_sts", help="rho parameter of sophia optimizer",type=float,default=0.015)
+    parser.add_argument("--weight_decay_para", help="default for 'adamw': 0.01", type=float, default=0)
+    parser.add_argument("--weight_decay_sst", help="default for 'adamw': 0.01", type=float, default=0)
+    parser.add_argument("--weight_decay_sts", help="default for 'adamw': 0.01", type=float, default=0)
+    parser.add_argument("--beta1_para", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.965)
+    parser.add_argument("--beta1_sst", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.965)
+    parser.add_argument("--beta1_sts", help="first beta parameter of adam/sophia optimizer" ,type=float,default=0.965)
+    parser.add_argument("--beta2_para", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.99)
+    parser.add_argument("--beta2_sst", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.99)
+    parser.add_argument("--beta2_sts", help="second beta parameter of adam/sophia optimizer" ,type=float,default=0.99)
+    parser.add_argument("--rho_para", help="rho parameter of sophia optimizer",type=float,default=0.04)
+    parser.add_argument("--rho_sst", help="rho parameter of sophia optimizer",type=float,default=0.04)
+    parser.add_argument("--rho_sts", help="rho parameter of sophia optimizer",type=float,default=0.04)
     
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)    
     # tensorboard    
@@ -727,6 +739,7 @@ def get_args():
     parser.add_argument("--comment", type=str, default="")
     parser.add_argument("--profiler", action="store_true")
     
+    #training and model adjustments
     parser.add_argument("--shared", action="store_true") # shared model
     parser.add_argument("--smart", action="store_true") # SMART
     parser.add_argument("--multi_smart", help="if True every task uses different smart parameters during training", type=bool, default=False) 
@@ -734,31 +747,46 @@ def get_args():
     parser.add_argument("--skip_para", help="if True model is only trained on sst and sts data set", type=bool, default=False) 
     parser.add_argument("--weights", help="balance loss function with weights in para and sst", type=bool, default=False)
     parser.add_argument("--add_layers", help="add additional layers in model.predict_para/sts/sst", type=bool, default=False)
-    
-    parser.add_argument("--save", type=bool, default=False)
+    parser.add_argument("--one_embed", help="produce one bert embedding for a sentence pair instead of two seperate ones", type=bool, default=False)
+    parser.add_argument("--freeze_bert", help="freeze bert at end of training and only train the tasks classifier", type=bool, default=False)
+    #Model saving
+    parser.add_argument("--save",help= "save model of every epoch", type=bool, default=False)
+    parser.add_argument("--filepath", help= "path where model is saved",type=str, default='')
     
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = get_args()
-    args.filepath = f'Models/{args.optimizer}-para_sep-{args.para_sep}-weights-{args.weights}-onelayer-{args.add_layers}-multitask.pt' # save path for model
+    if args.filepath == '':
+        args.filepath = f'Models/{args.optimizer}-one_embed-{args.one_embed}-para_sep-{args.para_sep}-weights-{args.weights}-onelayer-{args.add_layers}-multitask.pt' # save path for model
     seed_everything(args.seed)  # fix the seed for reproducibility 
     if args.smart:
         args.comment = "smart"
         train_multitask(args)
+    elif args.freeze_bert: #train only the tasks classifiers on the last epochs
+    #if add_layers true the model trains the last layers all the time 
+    #if add_layers false the model is trained with linear classifiers first
+    #those are discarded and replaced by the nn classifier in the last epochs
+        args.filepath = f'Models/{args.optimizer}-one_embed-{args.one_embed}-add_layers-{args.add_layers}-freeze-{args.freeze_bert}-multitask.pt' # save path for model
+        train_multitask(args)
+        args.epochs = 10
+        args.option = 'pretrain' #pretrain option freezes bert parameters
+        args.add_layers = True
+        train_multitask(args)
+        
     else:
         if args.para_sep:
-            args.comment = "para_only"+"_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
+            #train first epochs on para and then train 10 epochs on all three datasets but only a tiny fraction of the para set is used
             train_multitask(args)
             args.skip_para = True
-            args.epochs = 20
+            args.epochs = 10
             args.comment = "para_skip""_weighted_loss"+str(args.weights)+"add_layers"+str(args.add_layers)
             args.para_sep = False
             train_multitask(args)
         else:
             args.comment = "sophia"
             train_multitask(args)
-
+            
     # if not args.profiler:
     #     test_model(args)
