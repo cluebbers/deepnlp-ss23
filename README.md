@@ -134,7 +134,7 @@ The dev loss is going up after 5 epochs. This confirms overfitting.
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Baseline_1|     51.14 %         |      85.23 %       | 52.15 % |
+| Baseline_1 |     51.14 %         |      85.23 %       | 52.15 % |
 | Baseline_2  |     51.41 %         |      77. 32 %       | 43.35 %  |
 
 ### Sophia Optimizer
@@ -188,7 +188,7 @@ python -u optuna_sophia.py --use_gpu --batch_size 64 --objective sts
 ``` 
 Optuna: `./optuna/Sophia-*`
 | Model name         | learning rate  | weight decay  | rho  |
-| ------------------ |---------------- | -------------- | ---
+| ------------------ |---------------- | -------------- | -------------- | 
 | SST |     2.59e-5       |      0.2302     | 0.0449 |
 | QQP |     3.45e-5       |      0.1267     | 0.0417  |
 | STS |     4.22e-4       |      0.1384     | 0.0315 |
@@ -200,7 +200,7 @@ python -u multitask_classifier.py --use_gpu --option finetune  --epochs 20 --com
 Tensorboard: Sep01_22-58-01_ggpu135sophia
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | ---
+| ------------------ |---------------- | -------------- | -------------- | 
 | Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
 
 This did not work as expected. Learning did not happen. Manual experimentation showed that the learning rate was likely too high.
@@ -208,12 +208,12 @@ This did not work as expected. Learning did not happen. Manual experimentation s
 #### Adding Dropout Layers
 Since the overfitting problem remained after the hyperparameter tuning, we added an individual loss layer for every task to reduce the overfitting. So, before the BERT embeddings were passed to the linear classifier layer of a task a dropout on the embeddings was applied. The dropout probability can be chosen differently for the different tasks. We tuned the dropout probabilities together with the learning rate and weight decay in another optuna study. We received the following dropout probabilities:
 | Para Dropout       | SST Dropout | STS Dropout
-| ------------------ |---------------- | -------------- 
+| ------------------ |---------------- | -------------- |  
 |  15%  |     5.2 %         |      22 %       
 
 We obtained the following results
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | ---
+| ------------------ |---------------- | -------------- | -------------- | 
 | Sophia_base |     .. %         |      .. %       | .. % |
 | Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
@@ -232,7 +232,7 @@ Thus, we might overfit on the SemEval and SST dataset before the model is traine
 To tackle this, we train the first 5 epochs only on the QQP dataset. The last epochs are trained on all datasets, but we only train on a randomly sampled tiny fraction of the QQP dataset, which has the same size as the other two datasets. The dropout layers and hyperparameters of the previous section were kept, since they should make the model more robust.
 The following results were obtained:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | ---
+| ------------------ |---------------- | -------------- | -------------- | 
 | Sophia_base |     .. %         |      .. %       | .. % |
 | Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
@@ -247,7 +247,7 @@ The distribution of the different classes in the SST dataset is not equal (class
 
 To balance the QQP and SST trainset we add weights to our Cross-Entropy loss function such that a training sample from a small class is assigned with an higher weight. This resulted in the following performance:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | ---
+| ------------------ |---------------- | -------------- | -------------- | 
 | Sophia_base |     .. %         |      .. %       | .. % |
 | Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
@@ -258,7 +258,7 @@ With this approach we could improve the performance on the SST dataset compared 
 #### Additional layers
 Another problem we earlier observed was that the task contradict each other, i.e. in separating QQP training the paraphrasing accuracy increased but the other to accuracies decreased. We try to solve these conflicts by adding a simple neural network with one hidden layer as classifier for each task instead of only a linear classifier. The idea is that each task gets more parameters to adjust which are not influenced by the other tasks. As activation function in the neuronal network we tested ReLu and tanh activation layers between the hidden layer and the output, but both options performed equally poor. 
 | Model name         | SST train_accuracy | QQP train_accuracy | STS train_correlation |
-| ------------------ |---------------- | -------------- | ---
+| ------------------ |---------------- | -------------- | -------------- | 
 | Sophia_base |     .. %         |      .. %       | .. % |
 | Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
@@ -282,7 +282,7 @@ python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --optimi
 Tensorboard: Aug25_11-01-31_ggpu136smart
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | ---
+| ------------------ |---------------- | -------------- | -------------- | 
 | SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
 
 The training metrics are similar to the baselines. The dev metrics are a bit better than the second baseline. 
