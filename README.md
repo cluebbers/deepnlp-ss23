@@ -109,20 +109,23 @@ Tensorboard: Jul19_21-50-55_Part1
 | BERT Base |     51.41 %         |    
 
 
-### Part 2 Baseline
+### Part 2 sBERT
 
-We created a baseline for evaluation with
+We started with sBERT. 
+For creating the baseline, we simply trained the in part one implemented Bert model on all data sets using the AdamW optimizer from part one with the standard hyperparameters ($lr = 1e-05$, $(\beta_{1},\beta_{2}) = (0.9, 0.999)$). 
+In each epoch we trained first on the whole Quora trainset, then on the whole SemEval trainset and finally on the whole SST trainset. 
+We used Cross-Entropy loss on the Quora and SST trainset and on the SemEval set we used MSE-loss applied to the cosine similarity of the bert embeddings of the two input sentences.
+To perform the paraphrasing and sentiment anaylsis task, a simple linear classifier layer was added on top of the BERT embeddings.
+We changed the code, so you have to run it on a commit before 2023-07-24.
 ```
 python multitask_classifier.py --use_gpu --batch_size 20 --lr 1e-5 --epochs 30 --option finetune --optimizer adamw
 ```
 Tensorboard: Jul23_21-38-22_Part2_baseline
 
-For creating the baseline, we simply trained the in part one implemented Bert model on all data sets using the AdamW optimizer from part one with the standard hyperparameters ($lr = 1e-05$, $(\beta_{1},\beta_{2}) = (0.9, 0.999)$). In each epoch we trained first on the whole Quora trainset, then on the whole SemEval trainset and finally on the whole SST trainset. We used Cross-Entropy loss on the Quora and SST trainset and on the SemEval set we used MSE-loss applied to the cosine similarity of the bert embeddings of the two input sentences.
-To perform the paraphrasing and sentiment anaylsis task, a simple linear classifier layer was added on top of the BERT embeddings.
-
 After 5 epochs no significant improvements in dev metrics. Train accuracy is nearly 100 % for every task.
 The conclusion is overfitting.
 We did another run to record the dev loss.
+Please take care to use a commit from 2023-08-25 to reproduce the results.
 
 ```
 python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --batch_size 64 --comment "baseline" --epochs 30
@@ -134,8 +137,8 @@ The dev loss is going up after 5 epochs. This confirms overfitting.
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Baseline_1 |     51.14 %         |      85.23 %       | 52.15 % |
-| Baseline_2  |     51.41 %         |      77. 32 %       | 43.35 %  |
+| sBERT-Baseline_1 |     51.14 %         |      85.23 %       | 52.15 % |
+| sBERT-Baseline_2  |     51.41 %         |      77. 32 %       | 43.35 %  |
 
 ### Sophia Optimizer
 
@@ -153,7 +156,7 @@ Tensorboard: Aug25_10-50-25_ggpu115sophia
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Sophia Baseline |     36.69 %         |      80.81 %       | 44.67 % |
+| sBERT-Sophia Baseline |     36.69 %         |      80.81 %       | 44.67 % |
 
 The training performs very different for the different tasks.
 - STS: the metrics and curves are similar to the baselines
@@ -173,6 +176,9 @@ Comparison of Adam (learning rate, weight decay) and Sophia (learning rate, weig
 python optuna_optimizer.py --use_gpu
 ```
 Optuna: `./optuna/optimizer-*`
+
+<img src="minbert-default-final-project/optuna/optimizer-slice.png" alt="alt text" width="900" height="300">
+
 The slice plot shows that learning rate and weight decay should be larger for Sophia.
 
 #### Tuning of Sophia
@@ -201,7 +207,7 @@ Tensorboard: Sep01_22-58-01_ggpu135sophia
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | -------------- | 
-| Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
+| sBERT-Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
 
 This did not work as expected. Learning did not happen. Manual experimentation showed that the learning rate was likely too high.
 
@@ -214,8 +220,8 @@ Since the overfitting problem remained after the hyperparameter tuning, we added
 We obtained the following results
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | -------------- | 
-| Sophia_base |     .. %         |      .. %       | .. % |
-| Sophia_dropout  |     .. %         |      ..%       | ..%  |
+| sBERT-Sophia_base |     .. %         |      .. %       | .. % |
+| sBERT-Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
 To reproduce this result run: 
 ```
@@ -233,8 +239,8 @@ To tackle this, we train the first 5 epochs only on the QQP dataset. The last ep
 The following results were obtained:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | -------------- | 
-| Sophia_base |     .. %         |      .. %       | .. % |
-| Sophia_dropout  |     .. %         |      ..%       | ..%  |
+| sBERT-Sophia_base |     .. %         |      .. %       | .. % |
+| sBERT-Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
 Use the same command as in the previous section and add the argument  ```--para_sep True``` for reproducing the results.
 
@@ -248,8 +254,8 @@ The distribution of the different classes in the SST dataset is not equal (class
 To balance the QQP and SST trainset we add weights to our Cross-Entropy loss function such that a training sample from a small class is assigned with an higher weight. This resulted in the following performance:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | -------------- | 
-| Sophia_base |     .. %         |      .. %       | .. % |
-| Sophia_dropout  |     .. %         |      ..%       | ..%  |
+| sBERT-Sophia_base |     .. %         |      .. %       | .. % |
+| sBERT-Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
 Use the same command as in the previous section and add the argument  ```--para_sep True --weights True``` for reproducing the results.
 
@@ -259,8 +265,8 @@ With this approach we could improve the performance on the SST dataset compared 
 Another problem we earlier observed was that the task contradict each other, i.e. in separating QQP training the paraphrasing accuracy increased but the other to accuracies decreased. We try to solve these conflicts by adding a simple neural network with one hidden layer as classifier for each task instead of only a linear classifier. The idea is that each task gets more parameters to adjust which are not influenced by the other tasks. As activation function in the neuronal network we tested ReLu and tanh activation layers between the hidden layer and the output, but both options performed equally poor. 
 | Model name         | SST train_accuracy | QQP train_accuracy | STS train_correlation |
 | ------------------ |---------------- | -------------- | -------------- | 
-| Sophia_base |     .. %         |      .. %       | .. % |
-| Sophia_dropout  |     .. %         |      ..%       | ..%  |
+| sBERT-Sophia_base |     .. %         |      .. %       | .. % |
+| sBERT-Sophia_dropout  |     .. %         |      ..%       | ..%  |
 
 Use the same command as in the previous section and add the argument  ```--para_sep True --weights True --add_layers True``` for reproducing the results.
 
@@ -283,7 +289,7 @@ Tensorboard: Aug25_11-01-31_ggpu136smart
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | -------------- | 
-| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
+| sBERT-SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
 
 The training metrics are similar to the baselines. The dev metrics are a bit better than the second baseline. 
 
@@ -314,8 +320,8 @@ Tensorboard: Sep01_22-53-32_ggpu135smart
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---------------- |
-| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
-| SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
+| sBERT-SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
+| sBERT-SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
 
 ### Regularization
 
@@ -336,7 +342,7 @@ Tensorboard: Aug25_09-53-27_ggpu137shared
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---------------- |
-| Shared similarity |     50.14 %         |      71.08 %       | 47.68 % |
+| sBERT-Shared similarity |     50.14 %         |      71.08 %       | 47.68 % |
 
 ### Combined Loss
 
@@ -348,7 +354,7 @@ Tensorboard Aug23_17-45-56_combined_loss
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---------------- |
-| Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
+| sBERT-Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
 
 The tasks seem to be too different to work well in this setup. 
 The loss is going down as it should, but the predicted values are not good, seen in the dev_loss and dev_acc. 
@@ -397,25 +403,25 @@ Our model achieves the following performance:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | -------------- |
 | State-of-the-Art                             | 59.8% | 90.7% |   93% |
-| Baseline_1  |     51.14 %         |      85.23 %       | 52.15 % |
-| Baseline_2 |     51.41 %         |      77. 32 %       | 43.35 %  |
-| Sophia Baseline|     36.69 %         |      80.81 %       | 44.67 % |
-| Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
-| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
-| SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
-| Shared Similarity |     50.14 %         |      71.08 %       | 47.68 % |
-| Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
-| BertSelfAttention (no augmentation)          | 44.6% | 77.2% | 48.3% |
-| ReorderedTraining (BertSelfAttention)        | 45.9% | 79.3% | 49.8% |
-| RoundRobinTraining (BertSelfAttention)       | 45.5% | 77.5% | 50.3% |
-| LinearSelfAttention                          | 40.5% | 75.6% | 37.8% |
-| NoBiasLinearSelfAttention                    | 40.5% | 75.6% | 37.8% |
-| SparsemaxSelfAttention                       | 39.0% | 70.7% | 56.8% |
-| CenterMatrixSelfAttention                    | 39.1% | 76.4% | 43.4% |
-| LinearSelfAttentionWithSparsemax             | 40.1% | 75.3% | 40.8% |
-| CenterMatrixSelfAttentionWithSparsemax       | 39.1% | 75.6% | 40.4% |
-| CenterMatrixLinearSelfAttention              | 42.4% | 76.2% | 42.4% |
-| CenterMatrixLinearSelfAttentionWithSparsemax | 39.7% | 76.4% | 39.2% |
+| sBERT-Baseline_1  |     51.14 %         |      85.23 %       | 52.15 % |
+| sBERT-Baseline_2 |     51.41 %         |      77. 32 %       | 43.35 %  |
+| sBERT-Sophia Baseline|     36.69 %         |      80.81 %       | 44.67 % |
+| sBERT-Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
+| sBERT-SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
+| sBERT-SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
+| sBERT-Shared Similarity |     50.14 %         |      71.08 %       | 47.68 % |
+| sBERT-Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
+| sBERT-BertSelfAttention (no augmentation)          | 44.6% | 77.2% | 48.3% |
+| sBERT-ReorderedTraining (BertSelfAttention)        | 45.9% | 79.3% | 49.8% |
+| sBERT-RoundRobinTraining (BertSelfAttention)       | 45.5% | 77.5% | 50.3% |
+| sBERT-LinearSelfAttention                          | 40.5% | 75.6% | 37.8% |
+| sBERT-NoBiasLinearSelfAttention                    | 40.5% | 75.6% | 37.8% |
+| sBERT-SparsemaxSelfAttention                       | 39.0% | 70.7% | 56.8% |
+| sBERT-CenterMatrixSelfAttention                    | 39.1% | 76.4% | 43.4% |
+| sBERT-LinearSelfAttentionWithSparsemax             | 40.1% | 75.3% | 40.8% |
+| sBERT-CenterMatrixSelfAttentionWithSparsemax       | 39.1% | 75.6% | 40.4% |
+| sBERT-CenterMatrixLinearSelfAttention              | 42.4% | 76.2% | 42.4% |
+| sBERT-CenterMatrixLinearSelfAttentionWithSparsemax | 39.7% | 76.4% | 39.2% |
 
 [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0)
 
@@ -424,14 +430,11 @@ Our model achieves the following performance:
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
 ## Future work
-   - Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task. 
+- Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. 
+This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task. 
 - give other losses different weights. 
 - with or without combined losses. 
 - maybe based in dev_acc performance in previous epoch.
-
-Here is the course [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0).
-
-[State-of-the-Art](https://paperswithcode.com/sota/sentiment-analysis-on-sst-5-fine-grained)
 
 ## Contributing
 
@@ -440,7 +443,7 @@ Here is the course [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3A
 ## Member Contributions
 Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset 
 
-Lübbers, Christopher L.: Part 1 complete; Part 2: Multitask classifier, Tensorboard (metrics + profiler), Baseline, SOPHIA, SMART, Optuna, Optuna for Optimizer, Optuna for SMART, Optuna for regularization, Multitask training with combinded losses, Multitask with gradient surgery, README for those tasks
+Lübbers, Christopher L.: Part 1 complete; Part 2: sBERT, Tensorboard (metrics + profiler), sBERT-Baseline, SOPHIA, SMART, Optuna, sBERT-Optuna for Optimizer, Optuna for sBERT-SMART, Optuna for sBERT-regularization, sBERT with combinded losses, sBERT with gradient surgery, README for those tasks
 
 Niegsch, Luaks*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
