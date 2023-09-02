@@ -301,7 +301,7 @@ def test_model_multitask(args, model, device):
 def optuna_eval(sentiment_dataloader,
                          paraphrase_dataloader,
                          sts_dataloader,
-                         model, device, n_iter):
+                         model, device, n_iter, args = None):
     model.eval()  # switch to eval model, will turn off randomness like dropout
     
     with torch.no_grad():
@@ -332,7 +332,10 @@ def optuna_eval(sentiment_dataloader,
             
             num_batches +=1
             if num_batches >= n_iter:
-                break  
+                break
+
+            if args and num_batches >= args.num_batches_para:
+                break
 
         paraphrase_accuracy = accuracy_score(para_y_true, para_y_pred)
         
@@ -360,6 +363,9 @@ def optuna_eval(sentiment_dataloader,
 
             sts_y_pred.extend(y_hat)
             sts_y_true.extend(b_labels)
+
+            if args and step >= args.num_batches_sts:
+                break
             
         pearson_mat = np.corrcoef(sts_y_pred,sts_y_true)
         sts_corr = pearson_mat[1][0]
@@ -381,8 +387,11 @@ def optuna_eval(sentiment_dataloader,
             b_labels = b_labels.flatten().cpu().numpy()
 
             sst_y_pred.extend(y_hat)
-            sst_y_true.extend(b_labels)  
-            
+            sst_y_true.extend(b_labels)
+
+            if args and step >= args.num_batches_sst:
+                break
+
         sentiment_accuracy = accuracy_score(sst_y_true, sst_y_pred)
 
         return (paraphrase_accuracy, sts_corr, sentiment_accuracy)
@@ -390,7 +399,7 @@ def optuna_eval(sentiment_dataloader,
 def smart_eval(sentiment_dataloader,
                          paraphrase_dataloader,
                          sts_dataloader,
-                         model, device, n_iter):
+                         model, device, n_iter, args = None):
     model.eval()  # switch to eval model, will turn off randomness like dropout
 
     with torch.no_grad():
@@ -429,7 +438,10 @@ def smart_eval(sentiment_dataloader,
             para_sent_ids.extend(b_sent_ids)
             
             if num_batches >= n_iter:
-                break  
+                break
+
+            if args and num_batches >= args.num_batches_para:
+                break
 
         para_loss = para_loss/num_batches #normalize loss
 
@@ -474,7 +486,10 @@ def smart_eval(sentiment_dataloader,
             sts_sent_ids.extend(b_sent_ids)
             
             if num_batches >= n_iter:
-                break  
+                break
+
+            if args and num_batches >= args.num_batches_sts:
+                break
             
         sts_loss = sts_loss/num_batches #normalize sts_loss
         
@@ -511,7 +526,10 @@ def smart_eval(sentiment_dataloader,
             sst_sent_ids.extend(b_sent_ids) 
             
             if num_batches >= n_iter:
-                break   
+                break 
+
+            if args and num_batches >= args.num_batches_sst:
+                break 
             
         sst_loss = sst_loss/num_batches #normalize loss
 
