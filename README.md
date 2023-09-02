@@ -56,6 +56,10 @@ tensorboard --logdir ./minbert-default-final-project/runs
 python classifier.py --use_gpu --batch_size 10 --lr 1e-5 --epochs 10 --option finetune
 ```
 Tensorboard: Jul19_21-50-55_Part1
+| Model name         | SST accuracy |
+| ------------------ |---------------- | 
+| BERT Base |     51.41 %         |    
+
 
 ### Part 2 Baseline
 
@@ -81,6 +85,11 @@ The dev metrics are a bit different this time.
 I DO NOT KNOW WHY. PLEASE CHECK.
 The dev loss is going up after 5 epochs. This confirms overfitting.
 
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Baseline_1|     51.14 %         |      85.23 %       | 52.15 % |
+| Baseline_2  |     51.41 %         |      77. 32 %       | 43.35 %  |
+
 ### Sophia Optimizer
 
 #### Implementation
@@ -94,6 +103,10 @@ We did one run with standard Sophia parameters and the same learning rate as Ada
 python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --optimizer "sophiag" --epochs 20 --comment "sophia" --batch_size 64
 ```
 Tensorboard: Aug25_10-50-25_ggpu115sophia
+
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Sophia Baseline |     36.69 %         |      80.81 %       | 44.67 % |
 
 The training performs very different for the different tasks.
 - STS: the metrics and curves are similar to the baselines
@@ -127,6 +140,23 @@ python -u optuna_sophia.py --use_gpu --batch_size 64 --objective sst
 python -u optuna_sophia.py --use_gpu --batch_size 64 --objective sts
 ``` 
 Optuna: `./optuna/Sophia-*`
+| Model name         | learning rate  | weight decay  | rho  |
+| ------------------ |---------------- | -------------- | ---
+| SST |     2.59e-5       |      0.2302     | 0.0449 |
+| QQP |     3.45e-5       |      0.1267     | 0.0417  |
+| STS |     4.22e-4       |      0.1384     | 0.0315 |
+
+Training with the parameters:
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --epochs 20 --comment "_sophia-opt" --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --lr_para 3.45e-5 --lr_sst 2.5877e-5 --lr_sts 0.0004
+```
+Tensorboard: Sep01_22-58-01_ggpu135sophia
+
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
+
+This did not work as expected. Learning did not happen. Manual experimentation showed that the learning rate was likely too high.
 
 #### Adding Dropout Layers
 Since the overfitting problem remained after the hyperparameter tuning, we added an individual loss layer for every task to reduce the overfitting. So, before the BERT embeddings were passed to the linear classifier layer of a task a dropout on the embeddings was applied. The dropout probability can be chosen differently for the different tasks. We tuned the dropout probabilities together with the learning rate and weight decay in another optuna study. We received the following dropout probabilities:
@@ -198,13 +228,17 @@ Since we still have a strong overfitting problem and the additional layers didn'
 
 [Paper](https://aclanthology.org/2020.acl-main.197/) and [code](https://github.com/namisan/mt-dnn)
 
-The perturbation code is in `smart_perturbation.py` with additional utilities in `smart_utils.py`
+The perturbation code is in `smart_perturbation.py` with additional utilities in `smart_utils.py`. Training with standard parameters:
 ```
 python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --optimizer "adamw" --epochs 20 --comment "smart" --batch_size 32 --smart
 ```
 Tensorboard: Aug25_11-01-31_ggpu136smart
 
-The traing metrics are similar to the baselines. The dev metrics are a bit better than the second baseline. 
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
+
+The training metrics are similar to the baselines. The dev metrics are a bit better than the second baseline. 
 
 #### Tuning 
 
@@ -218,6 +252,24 @@ python -u optuna_smart.py --use_gpu --batch_size 50 --objective sst
 python -u optuna_smart.py --use_gpu --batch_size 50 --objective sts
 ```
 Optuna: `./optuna/smart-*`
+
+| Model name         | epsilon  | step size  | noise_var  | norm_p
+| ------------------ |---------------- | -------------- | ---------------- |---------------- |
+| SST |     3.93e-6       |      0.0001    | 4.21e-6 | inf |
+| QQP |     1.88e-7      |      0.0012     | 1.31e-5 | L2 |
+| STS |     4.38e-7      |      0.0024    | 1.67e-5 | L2 |
+
+Training with these parameters:
+```
+python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --optimizer "adamw" --epochs 20 --comment "_smart" --batch_size 32 --smart --multi_smart True
+```
+Tensorboard: Sep01_22-53-32_ggpu135smart
+
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---------------- |
+| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
+| SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
+
 ### Regularization
 
 ```
@@ -235,6 +287,10 @@ python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --shared
 ```
 Tensorboard: Aug25_09-53-27_ggpu137shared
 
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---------------- |
+| Shared similarity |     50.14 %         |      71.08 %       | 47.68 % |
+
 ### Combined Loss
 
 Loss for every task is calculated. All losses are summed up and optimized.
@@ -243,7 +299,13 @@ python multitask_combined_loss.py --use_gpu
 ```
 Tensorboard Aug23_17-45-56_combined_loss
 
-The tasks seem to be too different to work well in this setup. The loss is going down as it should, but the predicted values are not good, seen in the dev_loss and dev_acc
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---------------- |
+| Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
+
+The tasks seem to be too different to work well in this setup. 
+The loss is going down as it should, but the predicted values are not good, seen in the dev_loss and dev_acc. 
+We guess because of the large training set for paraphrase detection, this dominates the learning process.
 
 ### Gradient Surgery
 Implementation from [Paper](https://arxiv.org/pdf/2001.06782.pdf) and [code](https://github.com/WeiChengTseng/Pytorch-PCGrad)
@@ -292,8 +354,15 @@ Our model achieves the following performance on :
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Baseline  |     51 %         |      85 %       | 52 % |
 | State-of-the-Art  |     59.8 %         |      90.7%       | 93%  |
+| Baseline_1  |     51.14 %         |      85.23 %       | 52.15 % |
+| Baseline_2 |     51.41 %         |      77. 32 %       | 43.35 %  |
+| Sophia Baseline|     36.69 %         |      80.81 %       | 44.67 % |
+| Sophia Tuned |     26.25 %         |      62.74 %       | 3.061 % |
+| SMART Baseline |     50.41 %         |      79.64 %       | 52.60 % |
+| SMART Tuned |     51.41 %         |      80.58 %       | 48.46 % |
+| Shared Similarity |     50.14 %         |      71.08 %       | 47.68 % |
+| Combined Loss |     38.33 %         |      81.12 %       | 44.68 % |
 
 Here is the course [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0).
 
