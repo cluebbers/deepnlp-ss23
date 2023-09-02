@@ -65,7 +65,7 @@ Tensorboard: Jul19_21-50-55_Part1
 
 We created a baseline for evaluation with
 ```
-python multitask_classifier.py --use_gpu --batch_size 20 --lr 1e-5 --epochs 30 --option finetune
+python multitask_classifier.py --use_gpu --batch_size 20 --lr 1e-5 --epochs 30 --option finetune --optimizer adamw
 ```
 Tensorboard: Jul23_21-38-22_Part2_baseline
 
@@ -74,7 +74,7 @@ To perform the paraphrasing and sentiment anaylsis task, a simple linear classif
 
 After 5 epochs no significant improvements in dev metrics. Train accuracy is nearly 100 % for every task.
 The conclusion is overfitting.
-We did another run and recorded the dev loss.
+We did another run to record the dev loss.
 
 ```
 python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --batch_size 64 --comment "baseline" --epochs 30
@@ -82,7 +82,6 @@ python -u multitask_classifier.py --use_gpu --option finetune --lr 1e-5 --batch_
 Tensorboard: Aug25_10-01-58_ggpu136baseline
 
 The dev metrics are a bit different this time. 
-I DO NOT KNOW WHY. PLEASE CHECK.
 The dev loss is going up after 5 epochs. This confirms overfitting.
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
