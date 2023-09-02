@@ -19,7 +19,7 @@ class MultitaskBERT(nn.Module):
     def __init__(self, config):
         super().__init__()
         raise NotImplementedError("The forward method does not implement task_ids yet!")
-        
+        self.config = config
         self.bert = load_bert_model(config)
 
         self.hidden_size = BERT_HIDDEN_SIZE
@@ -155,6 +155,7 @@ class SharedMultitaskBERT(nn.Module):
     '''
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.bert = load_bert_model(config)
 
         self.hidden_size = BERT_HIDDEN_SIZE
@@ -234,6 +235,7 @@ class SmartMultitaskBERT(nn.Module):
     '''
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.bert = load_bert_model(config)
 
         self.hidden_size = BERT_HIDDEN_SIZE
