@@ -8,59 +8,12 @@ The goal for Part 1 is to implement a base BERT version including the AdamW opti
 The goal for Part 2 is to implement multitask training for sentiment analysis on Stanford Sentiment Treebank (SST), paraphrase detection on Quora Question Pairs Dataset (QQP) and semantic textual similarity on SemEval STS Benchmark (STS).
 
 ## Methodology
-For my fellow project mates:
-- look at multitask_classifier.py This is the main file where the important things happen
-    - line 45: model definition
-    - 185: save model
-    - 200: training
-        - dataloader
-        - 249: optimizer
-        - 261: tensorboard start + profiler
-        - 280: epochs
-            - 292: sts
-            - 353: sst
-            - 413: qpq
-            - 470: evaluation
-    - 567: arguments (some added at bottom)
-- tensorboard
-    - to open tensorboard
-    ```
-    tensorboard --logdir runs
-    ```
-    - sections Accuracy, F1 and loss are for classifier.py only (SST)
-    - other sections are (currently) for the baseline run
-- as described in section Experiments and as Lukas already pointed out, our main issue seems to be overfitting
-- so my suggested work packages (milestones and issues, see [Gitlab](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones)) focus on that
-My priority issues would be
-0. https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/50
-0. https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/51
-1. [Error Analysis](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/6#tab-issues)
-    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/45
-    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/29
-    - some cool stuff with CAPTUM
-2. [Regularization](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/7#tab-issues) 
-    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/46
-    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/34
-    - tune regularization parameters with optuna
-3. [Sophia Optimizer](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/9#tab-issues)
-    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/48
-    - https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/49
-4. [Multitask finetuning](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/10#tab-issues)
-    - current implementation of multitask finetuning multitask_classifier_learning.py is **very** basic
-    - it could also work as regularization, since it not perfectly trains on the loss of every single task
-5. [Generalisations on Custom Attention](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/11#tab-issues)
-    - At this Station we are considering/trying three ideas of Generalisations by hyperparameters on the Bert-Self-Attention (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/54))
-    - Although the idea of envolving more hyperparameters, should improve the result, however because of overfitting we are getting even a bit lower accuracy.
-    - Sparessmax (paper) : (https://arxiv.org/abs/1602.02068v2).
-6. [Splitted and reordererd batches](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/12#tab-issues)
-    - At this Step we are considring a specific order of batches by splitting the the datasets and put them in a specific order, (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/59)).
-    - The idea works. We recieve at least 1% more accurcy at each task.    
-
-
 ### Part 1
 We followed the instructions in the project description.
 
-### Part 2
+### sBERT
+We first implemented sBERT and focused on improving the accuracy for the three tasks.
+
 To create a baseline, we used the provided template and implemented a very basic model for all tasks. 
 All tasks are trained on seperately. 
 We achieved a training accuracy of nearly 100 %.
@@ -344,8 +297,20 @@ Tensorboard: Aug25_09-53-27_ggpu137shared
 | ------------------ |---------------- | -------------- | ---------------- |
 | sBERT-Shared similarity |     50.14 %         |      71.08 %       | 47.68 % |
 
+### Custom Attention
+[Generalisations on Custom Attention](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/11#tab-issues)
+    - At this Station we are considering/trying three ideas of Generalisations by hyperparameters on the Bert-Self-Attention (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/54))
+    - Although the idea of envolving more hyperparameters, should improve the result, however because of overfitting we are getting even a bit lower accuracy.
+    - Sparessmax (paper) : (https://arxiv.org/abs/1602.02068v2).
+
+### Splitted and reordered batches
+[Splitted and reordererd batches](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/12#tab-issues)
+    - At this Step we are considring a specific order of batches by splitting the the datasets and put them in a specific order, (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/59)).
+    - The idea works. We recieve at least 1% more accurcy at each task.   
 ### Combined Loss
 
+This could work as a kind of regularization, because it is not training on a single task and overfitting, but it uses all losses to optimize. 
+So no single task is trained as best as it could.
 Loss for every task is calculated. All losses are summed up and optimized.
 ```
 python multitask_combined_loss.py --use_gpu
