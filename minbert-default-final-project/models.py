@@ -250,9 +250,11 @@ class SmartMultitaskBERT(nn.Module):
         #self.relu = torch.nn.Tanh() 
         self.relu = torch.nn.ReLU() 
         
-        if self.dropout2 is not None:
+        if config.hidden_dropout_prob2:
             self.dropout2 = torch.nn.Dropout(config.hidden_dropout_prob2)
-        
+        else:
+            self.dropout2 = None
+
         # linear sentiment classifier
         self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
         #add simple neuronal network with one hidden layer and ReLu activation function
