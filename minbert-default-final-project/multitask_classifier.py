@@ -394,6 +394,10 @@ def train_multitask(args):
             writer.add_scalar(f"sst/dev-f1/class_{i}", class_f1, epoch)        
         
         writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)
+        # close tensorboard
+        writer.flush()
+        writer.close()
+        
         
         # store best results    
         if dev_para_acc > best_para_dev_acc:
