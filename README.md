@@ -221,8 +221,8 @@ The distribution of the different classes in the SST dataset is not equal (class
 To balance the QQP and SST trainset we add weights to our Cross-Entropy loss function such that a training sample from a small class is assigned with an higher weight. This resulted in the following performance:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | -------------- | 
-| sBERT-Sophia_base |     .. %         |      .. %       | .. % |
-| sBERT-Sophia_dropout  |     .. %         |      ..%       | ..%  |
+| Sophia Baseline (Finn) |     45%          |      77,8%        | 32 % |
+| Sophia balanced data  |     47,8 %         |      81,8%       | 45,5%  |
 
 Use the same command as in the previous section and add the argument  ```--para_sep True --weights True``` for reproducing the results.
 
@@ -232,13 +232,12 @@ With this approach we could improve the performance on the SST dataset compared 
 ...
 
 #### Additional layers
-Another problem we earlier observed was that the task contradict each other, i.e. in separating QQP training the paraphrasing accuracy increased but the other to accuracies decreased. We try to solve these conflicts by adding a simple neural network with one hidden layer as classifier for each task instead of only a linear classifier. The idea is that each task gets more parameters to adjust which are not influenced by the other tasks. As activation function in the neuronal network we tested ReLu and tanh activation layers between the hidden layer and the output, but both options performed equally poor. 
-| Model name         | SST train_accuracy | QQP train_accuracy | STS train_correlation |
-| ------------------ |---------------- | -------------- | -------------- | 
-| sBERT-Sophia_base |     .. %         |      .. %       | .. % |
-| sBERT-Sophia_dropout  |     .. %         |      ..%       | ..%  |
-| Adam base |     .. %         |      .. %       | .. % |
-| Adam additional layers |     .. %         |      ..%       | ..%  |
+Another problem we earlier observed was that the task contradict each other, i.e. in separating QQP training the paraphrasing accuracy increased but the other to accuracies decreased. We try to solve these conflicts by adding a simple neural network with one hidden layer as classifier for each task instead of only a linear classifier. The idea is that each task gets more parameters to adjust which are not influenced by the other tasks. As activation function in the neuronal network we tested ReLu and tanh activation layers between the hidden layer and the output. The ReLu activation function performed better.  Furthermore, we tried to freeze the BERT parameters in the last trainings epohs and only train the classifier parameters. This improved the performance especially on the SST dataset.
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Adam new base |     50,3 %         |      86,4 %       | 84,7 % |
+| Adam additional layer|     50%          |      88,4%        | 84,4 % |
+| Adam extra classifier training|     51,6%          |      88,5%        | 84,3 % |
 
 Use the same command as in the previous section and add the argument  ```--para_sep True --weights True --add_layers True``` for reproducing the results.
 
@@ -313,66 +312,14 @@ Tensorboard: Aug25_09-53-27_ggpu137shared
 
 ### Custom Attention
 [Generalisations on Custom Attention](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/11#tab-issues)
-
-We tried changing the normal custom attention formula:
-
-1) Generalize $QK^T$ with symmetric linear combination of both $Q, K$ and learn the combination:
-
-$$attention(Q, K, V) = softmax\left(\frac{(\alpha_1 * Q + \alpha_2 * K + \alpha_3I)(\beta_1 * Q + \beta_2 * K + \beta_3I)^T}{\sqrt{d_k}}\right)V$$
-
-2) Replace softmax with sparsemax (see https://arxiv.org/abs/1602.02068v2):
-
-$$attention(Q, K, V) = sparsemax\left(\frac{QK^T}{\sqrt{d_j}}\right)V$$
-
-3) Add an additional learnable center matrix in between:
-
-$$attention(Q, K, V) = softmax\left(\frac{QWK^T}{\sqrt{d_j}}\right)V$$
-
-For ideas 1, 3 we get the original self attention by having specific parameters. We also found a paper that showed the second idea. The goal was that the model uses the original parameters but having more freedom in manipulating them by adding few extra parameters inside all the bert layers. We later realized that all 3 ideas could be combined resulting in 8 different models (1 baseline + 7 extra):
-
-| Model name                 | SST accuracy | QQP accuracy | STS correlation |
-| -------------------------- | ------------ | ------------ | --------------- |
-| sBERT-BertSelfAttention (baseline)                 | 44.6% | 77.2% | 48.3% |
-| sBERT-LinearSelfAttention                          | 40.5% | 75.6% | 37.8% |
-| sBERT-NoBiasLinearSelfAttention                    | 40.5% | 75.6% | 37.8% |
-| sBERT-SparsemaxSelfAttention                       | 39.0% | 70.7% | 56.8% |
-| sBERT-CenterMatrixSelfAttention                    | 39.1% | 76.4% | 43.4% |
-| sBERT-LinearSelfAttentionWithSparsemax             | 40.1% | 75.3% | 40.8% |
-| sBERT-CenterMatrixSelfAttentionWithSparsemax       | 39.1% | 75.6% | 40.4% |
-| sBERT-CenterMatrixLinearSelfAttention              | 42.4% | 76.2% | 42.4% |
-| sBERT-CenterMatrixLinearSelfAttentionWithSparsemax | 39.7% | 76.4% | 39.2% |
-
-Our baseline was different because we used other starting parameters (greater batch size, fewer parameters). We did this to reduce the training time for this experiment, see also ``submit_custom_attention.sh``:
-
-```
-python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --custom_attention=$CUSTOM_ATTENTION
-```
-
-Except for the SparsemaxSelfAttention STS correlation, all values declined. The problem is highly due to overfitting. Making the model even more complex makes overfitting worse, thus we get worse performance.
+ - At this Station we are considering/trying three ideas of Generalisations by hyperparameters on the Bert-Self-Attention (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/54))
+ - Although the idea of envolving more hyperparameters, should improve the result, however because of overfitting we are getting even a bit lower accuracy.
+- Sparessmax (paper) : (https://arxiv.org/abs/1602.02068v2).
 
 ### Splitted and reordered batches
 [Splitted and reordererd batches](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/12#tab-issues)
-
-The para dataset is much larger than the other two. Originally, we trained para last and then evaluate all 3 independent from each other. This has the effect that the model is optimized towards para, but forgets information from sst and sts. We moved para first and then did the other two last.
-
-Furthermore, all 3 datasets are learned one after another. This means that the gradiants may point in 3 different directions which we follow one after another. However, our goal is to move in the general direction for all 3 tasks together. We tried splitting the datasets into 6 different chunks (large para), (tiny sst, tiny para), (sts_size sts, sts_size para, sts_size sst). Important here is that the last 3 batches are the same size. Thus we can train all tasks without having para dominate the others.
-
-Lastly, we tried training the batches for the last 3 steps in a round robin way (sts, para, sst, sts, para, sst, ...).
-
-| Model name                 | SST accuracy | QQP accuracy | STS correlation |
-| -------------------------- | ------------ | ------------ | --------------- |
-| sBERT-BertSelfAttention (baseline)                 | 44.6% | 77.2% | 48.3% |
-| sBERT-ReorderedTraining (BertSelfAttention)        | 45.9% | 79.3% | 49.8% |
-| sBERT-RoundRobinTraining (BertSelfAttention)       | 45.5% | 77.5% | 50.3% |
-
-We used the same script as for the custom attention, but only used the orignal self attention. The reordered training is enabled by default because it gave the best performance. The round robin training can be enabled using the ``--cyclic_finetuning`` flag.
-
-```
-python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --cyclic_finetuning=True
-```
-
-The reordering improved the performance, most likely just because the para comes first. The round robin did not improve it further, maybe switching after each batch is too much.
-
+ - At this Step we are considring a specific order of batches by splitting the the datasets and put them in a specific order, (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/59)).
+- The idea works. We recieve at least 1% more accurcy at each task.   
 ### Combined Loss
 
 This could work as a kind of regularization, because it is not training on a single task and overfitting, but it uses all losses to optimize. 
@@ -572,28 +519,28 @@ This could be achieved be generating more (true) data from the datasets sst and 
 - Dropout and weight decay tuning for BERT (AdamW and Sophia)
 
 ## Member Contributions
-Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset
+Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset 
 
 Lübbers, Christopher L.: Part 1 complete; Part 2: sBERT, Tensorboard (metrics + profiler), sBERT-Baseline, SOPHIA, SMART, Optuna, sBERT-Optuna for Optimizer, Optuna for sBERT and BERT-SMART, Optuna for sBERT-regularization, sBERT with combinded losses, sBERT with gradient surgery, README-Experiments for those tasks, README-Methodology, final model, ai usage card
 
-Niegsch, Lukas*: Generalisations on Custom Attention, Splitted and reordererd batches, repository maintenance (merging, lfs, some code refactoring)
+Niegsch, Lukas*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
-Schmidt, Finn Paul:
+Schmidt, Finn Paul: sBert ultitzask training, Sophia dropout layers, Sophia seperated paraphrasing training, Sophia weighted loss, Optuna study on the dropout and hyperparameters, BERT baseline adam, BERT additional layers, error_analysis
 
 
 ## Submit commands
 
-Für sophia base mit optimierten parametern zu trainieren:
+To train the sophia base model with optimised parameters run :
 ```
 python -u multitask_classifier.py --use_gpu --option finetune  --epochs 10 --comment "_sophia-chris_opt2" --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --lr_para 1e-5 --lr_sst 1e-5 --lr_sts 1e-5
 ```
 
-Für sophia mit optimierten parametern und dropout layern:
+To train the sophia model with dropout layers and optimized hyperparameters run:
 ```
 python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 10 --hidden_dropout_prob_para 0.15 --hidden_dropout_prob_sst 0.052 --hidden_dropout_prob_sts 0.22 --lr_para 1.8e-05 --lr_sst 5.6e-06 --lr_sts 1.1e-05 --weight_decay_para 0.038 --weight_decay_sst 0.17 --weight_decay_sts 0.22 --comment individual_dropout
 ```
 
-Für sophia mit gewichtetem loss und para datenset als erstes ein paar epochen zu trainieren (ohne dropout):
+To train the sophia model with weighted loss and seperate paraphrasing training run:
 ```
 python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 5 --weights True --para_sep True --hidden_dropout_prob_para 0 --hidden_dropout_prob_sst 0 --hidden_dropout_prob_sts 0 --lr_para 1e-05 --lr_sst 1e-05 --lr_sts 1e-05 --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --comment weighted_loss_without_dropout
 ```
