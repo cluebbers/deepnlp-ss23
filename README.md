@@ -331,6 +331,7 @@ $$attention(Q, K, V) = softmax\left(\frac{QWK^T}{\sqrt{d_j}}\right)V$$
 For ideas 1, 3 we get the original self attention by having specific parameters. We also found a paper that showed the second idea. The goal was that the model uses the original parameters but having more freedom in manipulating them by adding few extra parameters inside all the bert layers. We later realized that all 3 ideas could be combined resulting in 8 different models (1 baseline + 7 extra):
 
 | Model name                 | SST accuracy | QQP accuracy | STS correlation |
+| -------------------------- | ------------ | ------------ | --------------- |
 | sBERT-BertSelfAttention (baseline)                 | 44.6% | 77.2% | 48.3% |
 | sBERT-LinearSelfAttention                          | 40.5% | 75.6% | 37.8% |
 | sBERT-NoBiasLinearSelfAttention                    | 40.5% | 75.6% | 37.8% |
@@ -359,6 +360,7 @@ Furthermore, all 3 datasets are learned one after another. This means that the g
 Lastly, we tried training the batches for the last 3 steps in a round robin way (sts, para, sst, sts, para, sst, ...).
 
 | Model name                 | SST accuracy | QQP accuracy | STS correlation |
+| -------------------------- | ------------ | ------------ | --------------- |
 | sBERT-BertSelfAttention (baseline)                 | 44.6% | 77.2% | 48.3% |
 | sBERT-ReorderedTraining (BertSelfAttention)        | 45.9% | 79.3% | 49.8% |
 | sBERT-RoundRobinTraining (BertSelfAttention)       | 45.5% | 77.5% | 50.3% |
