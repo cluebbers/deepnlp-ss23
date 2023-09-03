@@ -28,7 +28,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Run the script:
-python -u optuna_smart.py --use_gpu --batch_size 64 --objective para --one_embed True --add_layers --n_trials 50 --epochs 3
+python -u optuna_smart.py --use_gpu --batch_size 50 --objective para --one_embed True --add_layers --n_trials 50 --epochs 3
 
 # Run the script with logger:
 #python -u train_with_logger.py -l ~/${SLURM_JOB_NAME}_${SLURM_JOB_ID}  -t True -p True -d True -s True -f True
