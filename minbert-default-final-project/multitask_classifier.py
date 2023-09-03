@@ -87,7 +87,7 @@ def train_multitask(args):
               'option': args.option,
               'local_files_only': args.local_files_only}
     
-    n_iter= len(sst_train_dataloader)
+    n_iter= 1
 
     config = SimpleNamespace(**config)
     
@@ -171,7 +171,7 @@ def train_multitask(args):
     best_sts_dev_cor = 0
     best_dev_acc = 0
     
-    n_iter= len(sst_train_dataloader)
+    n_iter= len(para_train_dataloader)
                   
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
@@ -667,8 +667,7 @@ def test_model(args):
         model = model.to(device)
         print(f"Loaded model to test from {args.filepath}")
 
-        para_acc,sst_acc,sts_cor,embed,labels = test_model_smart(args, model, device)
-    return model,para_acc,sst_acc,sts_cor,embed,labels
+        test_model_smart(args, model, device)
 
 def get_args():
     parser = argparse.ArgumentParser()

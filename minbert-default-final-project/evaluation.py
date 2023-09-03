@@ -658,7 +658,7 @@ def test_model_smart(args, model, device):
 
         _,dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids,_,_,_, \
             _,dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids,_,_,_,_,dev_sts_corr, \
-            dev_sts_y_pred, dev_sts_sent_ids,embed,labels = smart_eval(sst_dev_dataloader,
+            dev_sts_y_pred, dev_sts_sent_ids = smart_eval(sst_dev_dataloader,
                                                                     para_dev_dataloader,
                                                                     sts_dev_dataloader, model, device, 
                                                                     n_iter=9999999,one_embed=args.one_embed,add_layers=args.add_layers)
@@ -702,8 +702,6 @@ def test_model_smart(args, model, device):
             f.write(f"id \t Predicted_Similiary \n")
             for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
                 f.write(f"{p} , {s} \n")
-                
-        return dev_paraphrase_accuracy,dev_sentiment_accuracy,dev_sts_corr, embed,labels
     
 # Perform model evaluation in terms by averaging accuracies across tasks.
 def model_eval_test_smart(sentiment_dataloader,
