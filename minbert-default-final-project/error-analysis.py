@@ -28,7 +28,7 @@ if __name__ == "__main__":
     TQDM_DISABLE = False
     args = get_args()
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-    args.filepath = 'Models/sophiag-para_sep-True-weights-True-addlayers-False-multitask.pt'
+    #args.filepath = 'Models/sophiag-para_sep-True-weights-True-addlayers-False-multitask.pt'
     model,para_acc,sst_acc,sts_cor,embed,labels = test_model(args) #test_model makes the predictions and return accuracy/correlation on the dev datasets
     #make embeds/labels ready for tsne
     embed = embed.cpu().detach().numpy()

@@ -247,7 +247,11 @@ class SmartMultitaskBERT(nn.Module):
         self.dropout_sst = torch.nn.Dropout(config.hidden_dropout_prob_sst)
         self.dropout_sts = torch.nn.Dropout(config.hidden_dropout_prob_sts)
         
-        self.relu = torch.nn.Tanh()
+        #self.relu = torch.nn.Tanh() 
+        self.relu = torch.nn.ReLU() 
+        
+        if self.dropout2 is not None:
+            self.dropout2 = torch.nn.Dropout(config.hidden_dropout_prob2)
         
         # linear sentiment classifier
         self.sentiment_classifier= torch.nn.Linear(self.hidden_size, self.num_labels)
@@ -258,15 +262,18 @@ class SmartMultitaskBERT(nn.Module):
         # paraphrase classifier
         # double hidden size do concatenate both sentences
         self.paraphrase_classifier = torch.nn.Linear(self.hidden_size*2, 1)
+        self.paraphrase_classifier_one_embed = torch.nn.Linear(self.hidden_size, 1)
         #add simple neuronal network with one hidden layer and ReLu activation function
-        self.paraphrase_hidden_layer= torch.nn.Linear(self.hidden_size*2, int(self.hidden_size*0.5))
+        self.paraphrase_hidden_layer= torch.nn.Linear(self.hidden_size, int(self.hidden_size*0.5))
         self.paraphrase_output = torch.nn.Linear(int(self.hidden_size*0.5), 1)
         
         #cosine similarity classifier
-        #reduce dimensinoality to 20 before looking at cosine similarity
-        self.similarity_hidden_layer= torch.nn.Linear(self.hidden_size, 20)
-        self.similarity_output = torch.nn.Linear(int(self.hidden_size*0.5), 20)
         self.similarity_classifier = torch.nn.CosineSimilarity()
+        self.similarity_classifier_one_embed = torch.nn.Linear(self.hidden_size, 1)
+        #reduce dimensinoality to 20 before looking at cosine similarity
+        self.similarity_hidden_layer= torch.nn.Linear(self.hidden_size, int(self.hidden_size*0.5))
+        self.similarity_output = torch.nn.Linear(int(self.hidden_size*0.5), 1)
+        
 
     def forward(self,
         input_ids_1,        
@@ -305,16 +312,15 @@ class SmartMultitaskBERT(nn.Module):
         (0 - negative, 1- somewhat negative, 2- neutral, 3- somewhat positive, 4- positive)
         Thus, your output should contain 5 logits for each sentence.
         '''          
-        # and then projecting it using a linear layer.
-        if add_layers: #didn't work at all 
-            '''
+        
+        if add_layers: 
+            
             embed_1 = self.dropout_sst(embed_1)
             embed_1_hidden = self.sentiment_hidden_layer(embed_1)
             embed_1_hidden_forward = self.relu(embed_1_hidden)
             sentiment_logit = self.sentiment_output(embed_1_hidden_forward)
-            '''
-            embed_1 = self.dropout_sst(embed_1)
-            sentiment_logit = self.sentiment_classifier(embed_1)
+            
+            
         else:
             embed_1 = self.dropout_sst(embed_1)
             sentiment_logit = self.sentiment_classifier(embed_1)
@@ -328,25 +334,35 @@ class SmartMultitaskBERT(nn.Module):
         '''      
         
         embed_1 = self.dropout_para(embed_1)
-        embed_2 = self.dropout_para(embed_2)
-        # Element-wise difference
-        diff = torch.abs(embed_1 - embed_2)        
-        # Element-wise product
-        prod = embed_1 * embed_2
-        # Concatenate difference and product
-        pooled = torch.cat([diff, prod], dim=-1)
-        if add_layers:
-            ''' #didn't work 
-            pooled_hidden = self.paraphrase_hidden_layer(pooled)
-            pooled_hidden_forward = self.relu(pooled_hidden)
-            paraphrase_logit = self.paraphrase_output(pooled_hidden_forward).view(-1)
-            '''
-            pooled = pooled = torch.cat([embed_1, embed_2], dim=-1) 
-            paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
-        else:
-            paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
-        
-        return paraphrase_logit
+        if not embed_2 == None:
+            embed_2 = self.dropout_para(embed_2)
+            if add_layers:
+                pooled = embed_1-embed_2
+                pooled_hidden = self.paraphrase_hidden_layer(pooled)
+                pooled_hidden_forward = self.relu(pooled_hidden)
+                paraphrase_logit = self.paraphrase_output(pooled_hidden_forward).view(-1)
+                return paraphrase_logit
+            else:
+                # Element-wise difference
+                diff = torch.abs(embed_1 - embed_2)        
+                # Element-wise product
+                prod = embed_1 * embed_2
+                # Concatenate difference and product
+                pooled = torch.cat([diff, prod], dim=-1)
+                paraphrase_logit = self.paraphrase_classifier(pooled).view(-1)
+                return paraphrase_logit
+            
+        else: #one embedding for sentence pair
+            if add_layers:
+                embed_1_hidden = self.paraphrase_hidden_layer(embed_1)
+                embed_1_hidden_forward = self.relu(embed_1_hidden)
+                paraphrase_logit = self.paraphrase_output(embed_1_hidden_forward).view(-1)
+                return paraphrase_logit
+            else:
+                paraphrase_logit = self.paraphrase_classifier_one_embed(embed_1).view(-1)
+                return paraphrase_logit
+            
+       
 
     def predict_similarity(self, embed_1, embed_2,add_layers=False):
         '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
@@ -362,21 +378,23 @@ class SmartMultitaskBERT(nn.Module):
         #similarity = (F.cosine_similarity(pooled_1, pooled_2, dim=1) + 1) * 2.5
         #reduce dimensions with simple nn before applying cosine similarity
         embed_1 = self.dropout_sts(embed_1)
-        embed_2 = self.dropout_sts(embed_2)
-        if add_layers:
-            '''
-            embed1_hidden = self.similarity_hidden_layer(embed_1)
-            embed1_hidden_forward = self.relu(embed1_hidden)
-            embed1_lower_dim = self.similarity_output(embed1_hidden_forward)
+        if not embed_2 == None:
+            embed_2 = self.dropout_sts(embed_2)
+            if add_layers:
+                embed1_hidden = self.similarity_hidden_layer(embed_1) #reduce dim before applying cosine similarity
+                embed2_hidden = self.similarity_hidden_layer(embed_2)
+                similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
+                return similarity
+            else:
+                similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
+                return similarity
             
-            embed2_hidden = self.similarity_hidden_layer(embed_2)
-            embed2_hidden_forward = self.relu(embed2_hidden)
-            embed2_lower_dim = self.similarity_output(embed2_hidden_forward)
-            '''
-            embed_1 = self.similarity_hidden_layer(embed_1) #lower dimension to 20 before applying cosine similarity
-            embed_2 = self.similarity_hidden_layer(embed_2)
-            similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
-        else:
-            similarity = (self.similarity_classifier(embed_1, embed_2)+1)*2.5
-        
-        return similarity
+        else: #one embedding for sentence pair 
+            if add_layers:
+                embed1_hidden = self.similarity_hidden_layer(embed_1)
+                embed1_hidden_forward = self.relu(embed1_hidden)
+                logits= self.similarity_output(embed1_hidden_forward).view(-1)
+                return logits
+            else:
+                logits = self.similarity_classifier_one_embed(embed_1).view(-1)
+                return logits

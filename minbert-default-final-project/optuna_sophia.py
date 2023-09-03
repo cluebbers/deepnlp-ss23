@@ -95,6 +95,17 @@ def train_multitask(args):
             dropout_para = trial.suggest_float("dropout_para", 0.05, 0.4, log=True)
             dropout_sst = trial.suggest_float("dropout_sst", 0.05, 0.4, log=True)
             dropout_sts = trial.suggest_float("dropout_sts", 0.05, 0.4, log=True)
+            
+        if args.objective == "adam_lr":
+            dropout_para = 0
+            dropout_sst = 0
+            dropout_sts = 0
+        
+        if args.objective == "adam_reg":
+            dropout_para = trial.suggest_float("dropout_para", 0.05, 0.4)
+            dropout_sst = trial.suggest_float("dropout_sst", 0.05, 0.4)
+            dropout_sts = trial.suggest_float("dropout_sts", 0.05, 0.4)
+            
     
         # Init model
         config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -123,6 +134,23 @@ def train_multitask(args):
             '''  
         # SophiaG 
         k=10
+        if args.objective == "adam_lr":
+            lr_para = trial.suggest_float("lr-para", 1e-6, 1e-4, log=True)
+            lr_sst = trial.suggest_float("lr-sst", 1e-6, 1e-4, log=True)
+            lr_sts = trial.suggest_float("lr-sts", 1e-6, 1e-4, log=True)
+            optimizer_para = AdamW(model.parameters(), lr=lr_para)
+            optimizer_sst = SophiaG(model.parameters(), lr=lr_sst)
+            optimizer_sts = SophiaG(model.parameters(), lr=lr_sts)
+        
+        if args.objective == "adam_reg":
+            weight_decay_para = trial.suggest_float("weight_decay_para", 0.01, 0.3)
+            weight_decay_sst = trial.suggest_float("weight_decay_sst", 0.01, 0.3)
+            weight_decay_sts = trial.suggest_float("weight_decay_sts", 0.01, 0.3)
+            optimizer_para = AdamW(model.parameters(), lr=0,weight_decay=weight_decay_para)
+            optimizer_sst = AdamW(model.parameters(), lr=0,weight_decay=weight_decay_sst)
+            optimizer_sts = AdamW(model.parameters(), lr=0,weight_decay=weight_decay_sts)
+        
+        
         if args.objective == "all":         
             lr_para = trial.suggest_float("lr-para", 1e-6, 4e-5, log=True)
             lr_sst = trial.suggest_float("lr-sst", 1e-6, 4e-5, log=True)
@@ -185,7 +213,7 @@ def train_multitask(args):
                         break    
                 else:
                     rand = np.random.uniform()
-                    if rand >= len(sst_train_dataloader)/(2*len(para_train_dataloader)): #train only on small fraction of para_dataset while training on other datsets
+                    if rand >= len(sst_train_dataloader)/(len(para_train_dataloader)): #train only on small fraction of para_dataset while training on other datsets
                         continue  
                 
                 b_ids1, b_mask1, b_ids2, b_mask2, b_labels = (batch['token_ids_1'], batch['attention_mask_1'],
@@ -210,10 +238,11 @@ def train_multitask(args):
                 
                 # SOPHIA
                 # update hession EMA
-                if num_batches % k == k - 1:                  
-                    optimizer_para.update_hessian()
-                    #optimizer_para.zero_grad(set_to_none=True)   
-                    optimizer_para.zero_grad()
+                if  not args.objective in ["adam_lr","adam_reg"]:
+                    if num_batches % k == k - 1:                  
+                        optimizer_para.update_hessian()
+                        #optimizer_para.zero_grad(set_to_none=True)   
+                        optimizer_para.zero_grad()
                     
                
                     
@@ -247,11 +276,14 @@ def train_multitask(args):
                 loss_sts_train += loss_sts.item()
                 num_batches += 1
                 
+                
+                
                 # SOPHIA
                 # update hession EMA
-                if num_batches % k == k - 1:                  
-                    optimizer_sts.update_hessian()
-                    optimizer_sts.zero_grad(set_to_none=True)
+                if  not args.objective in ["adam_lr","adam_reg"]:
+                    if num_batches % k == k - 1:                  
+                        optimizer_sts.update_hessian()
+                        optimizer_sts.zero_grad(set_to_none=True)
                     
                 if num_batches >= n_iter:
                     break
@@ -287,9 +319,10 @@ def train_multitask(args):
                 
                 # SOPHIA
                 # update hession EMA
-                if "SophiaG" and num_batches % k == k - 1:                  
-                    optimizer_sst.update_hessian()
-                    optimizer_sst.zero_grad()
+                if  not args.objective in ["adam_lr","adam_reg"]:
+                    if "SophiaG" and num_batches % k == k - 1:                  
+                        optimizer_sst.update_hessian()
+                        optimizer_sst.zero_grad()
                     
                 if num_batches >= n_iter:
                     break
@@ -310,6 +343,7 @@ def train_multitask(args):
                 epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3
                 trial.report(epoch_acc, epoch)
                 print("epoch: ", epoch)
+                print("combined_acc: ", epoch_acc)
                 print("para_loss: ", loss_para_train)
                 print("sts_loss: ", loss_sts_train)
                 print("para_acc,sts_corr,sst_acc: ", paraphrase_accuracy,sts_corr,sentiment_accuracy)
@@ -320,7 +354,7 @@ def train_multitask(args):
                     pruned_trial = True
                     break
             elif args.objective == "para":
-                epoch_acc = (5*paraphrase_accuracy + sts_corr + sentiment_accuracy) / 7 #focus on para datset but don't hurt the performance on the other sets too much
+                epoch_acc = (2*paraphrase_accuracy + sts_corr + sentiment_accuracy) / 4 #focus on para datset but don't hurt the performance on the other sets too much
                 trial.report(epoch_acc, epoch)
                 print("epoch: ", epoch)
                 print("combined_acc: ", epoch_acc)
@@ -358,7 +392,35 @@ def train_multitask(args):
                 
                 if trial.should_prune():
                     pruned_trial = True
-                    break          
+                    break  
+                
+                
+            elif args.objective == "adam_lr":
+                epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3
+                trial.report(epoch_acc, epoch)
+                print("epoch: ", epoch)
+                print("combined_acc: ", epoch_acc)
+                print("para_loss: ", loss_para_train)
+                print("sts_loss: ", loss_sts_train)
+                print("para_acc,sts_corr,sst_acc: ", paraphrase_accuracy,sts_corr,sentiment_accuracy)
+                print("lr: para,sst,sts: ", lr_para, lr_sst, lr_sts)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break
+            
+            elif args.objective == "adam_reg":
+                epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3
+                trial.report(epoch_acc, epoch)
+                print("epoch: ", epoch)
+                print("combined_acc: ", epoch_acc)
+                print("para_loss: ", loss_para_train)
+                print("sts_loss: ", loss_sts_train)
+                print("para_acc,sts_corr,sst_acc: ", paraphrase_accuracy,sts_corr,sentiment_accuracy)
+                print("dropout: para,sst,sts: ", dropout_para, dropout_sst, dropout_sts)
+                print("wdecay: para,sst,sts: ", weight_decay_para,weight_decay_sst,weight_decay_sts)
+                if trial.should_prune():
+                    pruned_trial = True
+                    break
             print("")
             
             
@@ -375,6 +437,12 @@ def train_multitask(args):
         elif args.objective == "sts":  
              epoch_acc = (paraphrase_accuracy + 2*sts_corr + sentiment_accuracy) / 4
              study.tell(trial, epoch_acc, state=TrialState.COMPLETE) 
+        elif args.objective == "adam_lr":
+            epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3   
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)  
+        elif args.objective == "adam_reg":
+            epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3   
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -391,7 +459,7 @@ def get_args():
     parser.add_argument("--sts_test", type=str, default="data/sts-test-student.csv")
 
     parser.add_argument("--seed", type=int, default=11711)
-    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--option", type=str,
                         help='pretrain: the BERT parameters are frozen; finetune: BERT parameters are updated',
                         choices=('pretrain', 'finetune'), default="finetune")
@@ -413,8 +481,8 @@ def get_args():
     parser.add_argument("--hidden_dropout_prob_sst", type=float, default=0.3)
     parser.add_argument("--hidden_dropout_prob_sts", type=float, default=0.3)
     parser.add_argument("--local_files_only", action='store_true', default = True)
-    parser.add_argument("--n_trials", type=int, default=50)
-    parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="all")
+    parser.add_argument("--n_trials", type=int, default=70)
+    parser.add_argument("--objective", choices=("all","para", "sst", "sts","adam_lr","adam_reg"), default="all")
     
     args = parser.parse_args()
     return args
@@ -441,24 +509,24 @@ if __name__ == "__main__":
     if not os.path.exists('optuna'):
         os.makedirs('optuna')
         
-    with open('optuna/sophia_test2-'+ f'{args.objective}.txt', 'w') as f:
+    with open('optuna/'+ f'{args.objective}.txt', 'w') as f:
         f.write('\n'.join(lines))          
     
     fig = plot_optimization_history(study)
-    plt.savefig("optuna/sophia_test2-" + f'{args.objective}-history.png')
+    plt.savefig("optuna/" + f'{args.objective}-history.png')
     fig = plot_intermediate_values(study)
-    plt.savefig("optuna/sophia_test2-"+ f'{args.objective}-intermediate.png')
+    plt.savefig("optuna/"+ f'{args.objective}-intermediate.png')
     fig = plot_parallel_coordinate(study)
-    plt.savefig("optuna/sophia-_test2"+ f'{args.objective}-parallel.png')
+    plt.savefig("optuna/"+ f'{args.objective}-parallel.png')
     fig = plot_contour(study)
-    plt.savefig("optuna/sophia_test2-"+ f'{args.objective}-contour.png')
+    plt.savefig("optuna/"+ f'{args.objective}-contour.png')
     fig = plot_slice(study)
-    plt.savefig("optuna/sophia_test2-"+ f'{args.objective}-slice.png')
+    plt.savefig("optuna/"+ f'{args.objective}-slice.png')
     fig = plot_param_importances(study)
-    plt.savefig("optuna/sophia_test2-"+ f'{args.objective}-parameter.png')
+    plt.savefig("optuna/"+ f'{args.objective}-parameter.png')
     fig = plot_edf(study)
-    plt.savefig("optuna/sophia_test2-"+ f'{args.objective}-edf.png')
+    plt.savefig("optuna/"+ f'{args.objective}-edf.png')
     fig = plot_rank(study)
-    plt.savefig("optuna/sophia_test2-"+ f'{args.objective}-rank.png')
+    plt.savefig("optuna/"+ f'{args.objective}-rank.png')
     fig = plot_timeline(study)
-    plt.savefig("optuna/sophia_test2-"+ f'{args.objective}-timeline.png')
+    plt.savefig("optuna/"+ f'{args.objective}-timeline.png')

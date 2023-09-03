@@ -22,7 +22,7 @@ This python script returns a couple of graphics, which can be found in the error
 
 We created confusion matrix of the models precition with the actual labels on the QQP and SST set. Those lead to the idea to use weights in the loss function.
 
-Furthermore, we created a scatter plot of predicted similarity on the SemEval set (x-axis) and it's true similarity (y-axis). Additionally, we cretaed histograms of the predicted similarity distribution and the actual similarity distribution. Both show that the model tends to predict relatively high similarities compared to ground truth.
+Furthermore, we created a scatter plot of predicted similarity on the SemEval set (x-axis) and it's true similarity (y-axis). Additionally, we cretaed histograms of the predicted similarity distribution and the actual similarity distribution. Both show that the model tends to predict relatively high similarities compared to ground truth. Further, it seems the model doesn't learn properly on this dataset.
 
 At last we visualized the BERT embeddings of the first hundred samples of the SST dev set using t-SNE. Surprisingly, the samples of the class 0 are clustered together quite well, although the confusion matrix of the sst datset shows that the model struggles to predict class 0 correctly. 
 
