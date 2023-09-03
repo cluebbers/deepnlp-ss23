@@ -313,14 +313,64 @@ Tensorboard: Aug25_09-53-27_ggpu137shared
 
 ### Custom Attention
 [Generalisations on Custom Attention](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/11#tab-issues)
- - At this Station we are considering/trying three ideas of Generalisations by hyperparameters on the Bert-Self-Attention (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/54))
- - Although the idea of envolving more hyperparameters, should improve the result, however because of overfitting we are getting even a bit lower accuracy.
-- Sparessmax (paper) : (https://arxiv.org/abs/1602.02068v2).
+
+We tried changing the normal custom attention formula:
+
+1) Generalize $QK^T$ with symmetric linear combination of both $Q, K$ and learn the combination:
+
+$$attention(Q, K, V) = softmax\left(\frac{(\alpha_1 * Q + \alpha_2 * K + \alpha_3I)(\beta_1 * Q + \beta_2 * K + \beta_3I)^T}{\sqrt{d_k}}\right)V$$
+
+2) Replace softmax with sparsemax (see https://arxiv.org/abs/1602.02068v2):
+
+$$attention(Q, K, V) = sparsemax\left(\frac{QK^T}{\sqrt{d_j}}\right)V$$
+
+3) Add an additional learnable center matrix in between:
+
+$$attention(Q, K, V) = softmax\left(\frac{QWK^T}{\sqrt{d_j}}\right)V$$
+
+For ideas 1, 3 we get the original self attention by having specific parameters. We also found a paper that showed the second idea. The goal was that the model uses the original parameters but having more freedom in manipulating them by adding few extra parameters inside all the bert layers. We later realized that all 3 ideas could be combined resulting in 8 different models (1 baseline + 7 extra):
+
+| Model name                 | SST accuracy | QQP accuracy | STS correlation |
+| sBERT-BertSelfAttention (baseline)                 | 44.6% | 77.2% | 48.3% |
+| sBERT-LinearSelfAttention                          | 40.5% | 75.6% | 37.8% |
+| sBERT-NoBiasLinearSelfAttention                    | 40.5% | 75.6% | 37.8% |
+| sBERT-SparsemaxSelfAttention                       | 39.0% | 70.7% | 56.8% |
+| sBERT-CenterMatrixSelfAttention                    | 39.1% | 76.4% | 43.4% |
+| sBERT-LinearSelfAttentionWithSparsemax             | 40.1% | 75.3% | 40.8% |
+| sBERT-CenterMatrixSelfAttentionWithSparsemax       | 39.1% | 75.6% | 40.4% |
+| sBERT-CenterMatrixLinearSelfAttention              | 42.4% | 76.2% | 42.4% |
+| sBERT-CenterMatrixLinearSelfAttentionWithSparsemax | 39.7% | 76.4% | 39.2% |
+
+Our baseline was different because we used other starting parameters (greater batch size, fewer parameters). We did this to reduce the training time for this experiment, see also ``submit_custom_attention.sh``:
+
+```
+python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --custom_attention=$CUSTOM_ATTENTION
+```
+
+Except for the SparsemaxSelfAttention STS correlation, all values declined. The problem is highly due to overfitting. Making the model even more complex makes overfitting worse, thus we get worse performance.
 
 ### Splitted and reordered batches
 [Splitted and reordererd batches](https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/milestones/12#tab-issues)
- - At this Step we are considring a specific order of batches by splitting the the datasets and put them in a specific order, (see (https://gitlab.gwdg.de/lukas.niegsch/language-ninjas/-/issues/59)).
-- The idea works. We recieve at least 1% more accurcy at each task.   
+
+The para dataset is much larger than the other two. Originally, we trained para last and then evaluate all 3 independent from each other. This has the effect that the model is optimized towards para, but forgets information from sst and sts. We moved para first and then did the other two last.
+
+Furthermore, all 3 datasets are learned one after another. This means that the gradiants may point in 3 different directions which we follow one after another. However, our goal is to move in the general direction for all 3 tasks together. We tried splitting the datasets into 6 different chunks (large para), (tiny sst, tiny para), (sts_size sts, sts_size para, sts_size sst). Important here is that the last 3 batches are the same size. Thus we can train all tasks without having para dominate the others.
+
+Lastly, we tried training the batches for the last 3 steps in a round robin way (sts, para, sst, sts, para, sst, ...).
+
+| Model name                 | SST accuracy | QQP accuracy | STS correlation |
+| sBERT-BertSelfAttention (baseline)                 | 44.6% | 77.2% | 48.3% |
+| sBERT-ReorderedTraining (BertSelfAttention)        | 45.9% | 79.3% | 49.8% |
+| sBERT-RoundRobinTraining (BertSelfAttention)       | 45.5% | 77.5% | 50.3% |
+
+We used the same script as for the custom attention, but only used the orignal self attention. The reordered training is enabled by default because it gave the best performance. The round robin training can be enabled using the ``--cyclic_finetuning`` flag.
+
+```
+python -B multitask_classifier.py --use_gpu --epochs=10 --lr=1e-5 --cyclic_finetuning=True
+```
+
+The reordering improved the performance, most likely just because the para comes first. The round robin did not improve it further, maybe switching after each batch is too much.
+
 ### Combined Loss
 
 This could work as a kind of regularization, because it is not training on a single task and overfitting, but it uses all losses to optimize. 
