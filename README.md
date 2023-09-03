@@ -369,7 +369,7 @@ submit_multi_adamw_one_embed.sh
 ```
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Adam new base |     50,3 %         |      86,4 %       | 84,7 % |
+| BERT Baseline |     50,3 %         |      86,4 %       | 84,7 % |
 
 ### non-linear classifier
 
@@ -380,7 +380,7 @@ submit_multi_adamw_add_layers.sh
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Adam additional layer|     50%          |      88,4%        | 84,4 % |
+| BERT additional layer|     50%          |      88,4%        | 84,4 % |
 
 
 ### freeze
@@ -392,7 +392,22 @@ das verbessert das ergebnis nochmal etwas ( dritte Zeile) (man muss scheinbar nu
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Adam extra classifier training|     51,6%          |      88,5%        | 84,3 % |
+| BERT extra classifier training|     51,6%          |      88,5%        | 84,3 % |
+
+### SMART
+
+Using standard SMART parameters
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 10 --one_embed True  --add_layers True --comment adam_add_layers_one_embed_smart --smart --batch_size 64 --lr 1e-5
+```
+Tensorboard: Sep03_11-23-24_bert_smart
+
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---------------- |
+| BERT-SMART |     51.6 %         |      88.8 %       | 43.8 % |
+
+The bad sts correlation is because SMART uses MSE loss for its calculation of adverserial loss. 
+We did not change it yet.
 
 ### Tuning SMART
 We did another Optuna SMART run for base BERT.
@@ -412,12 +427,18 @@ python -u optuna_smart.py --use_gpu --batch_size 50 --objective para --one_embed
 | BERT-QQP |     67.00 | 1.83e-7      |      0.0014     | 2.32e-6 | L2 |
 | sBERT-STS |     49.64 | 4.38e-7      |      0.0024    | 1.67e-5 | L2 |
 | BERT-STS |     27.29 | 6.65e-6     |      0.0002    | 7.84e-6 | L1 |
+
+The bad sts correlation is because SMART uses MSE loss for its calculation of adverserial loss. 
+We did not change it yet.
+
 ### Final model
 We combined some of our results in the final model. 
 
 ```
 python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 10 --one_embed True  --add_layers True --comment adam_add_layers_one_embed --batch_size 64 --lr 1e-5
 ```
+Tensorboard: Sep03_11-24-17_bert_final
+
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---------------- |
 | BERT-Final |     51.2 %         |      88.8 %       | 82.2 % |
@@ -477,6 +498,10 @@ Our model achieves the following performance:
 | sBERT-CenterMatrixSelfAttentionWithSparsemax       | 39.1% | 75.6% | 40.4% |
 | sBERT-CenterMatrixLinearSelfAttention              | 42.4% | 76.2% | 42.4% |
 | sBERT-CenterMatrixLinearSelfAttentionWithSparsemax | 39.7% | 76.4% | 39.2% |
+| BERT Baseline |     50,3 %         |      86,4 %       | 84,7 % |
+| BERT-SMART |     51.6 %         |      88.8 %       | 43.8 % |
+| BERT additional layer|     50%          |      88,4%        | 84,4 % |
+| BERT extra classifier training|     51,6%          |      88,5%        | 84,3 % |
 | BERT-Final |     51.2 %         |      88.8 %       | 82.2 % |
 
 [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0)
