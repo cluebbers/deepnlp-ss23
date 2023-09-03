@@ -36,11 +36,19 @@ Um nicht linearen classifier zu verwenden nutze:
 ```
 submit_multi_adamw_add_layers.sh
 ```
+
+Um zuerst vier epochen alles zu trainieren (bert+nicht linearer classifier) und danach 10 epochen nur den nicht linearen classifier lasse folgendes laufen:
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 4 --one_embed True --freeze_bert True --add_layers True 
+```
+das verbessert das ergebnis nochmal etwas ( dritte Zeile) (man muss scheinbar nur eine epoche den nicht linearen classifier trainieren um schon das beste ergebnis zu bekommen, da er auch schon davor in diesem Fall mittrainiert wurde).
+
 Ergebnisse:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
 | Adam new base |     50,3 %         |      86,4 %       | 84,7 % |
 | Adam additional layer|     50%          |      88,4%        | 84,4 % |
+| Adam extra classifier training|     51,6%          |      88,5%        | 84,3 % |
 
 ## Methodology
 
