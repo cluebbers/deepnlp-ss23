@@ -8,7 +8,7 @@
 #SBATCH --ntasks=1                   # total number of tasks
 #SBATCH --cpus-per-task=2            # number cores per task
 #SBATCH --mail-type=all              # send mail when job begins and ends
-#SBATCH --mail-user=finn.schmidt@stud.uni-goettingen.de # TODO: change this to your mailaddress!
+#SBATCH --mail-user=c.luebbers@stud.uni-goettingen.de # TODO: change this to your mailaddress!
 #SBATCH --output=./slurm_files/slurm-%x-%j.out     # where to write output, %x give job name, %j names job id
 #SBATCH --error=./slurm_files/slurm-%x-%j.err      # where to write slurm error
 
@@ -28,7 +28,7 @@ python -m torch.utils.collect_env
 nvcc -V
 
 # Run the script:
-python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 10 --one_embed True  --add_layers True --comment adam_add_layers_one_embed_smart --batch_size 64 --lr 1e-5
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 10 --one_embed True  --add_layers True --comment adam_add_layers_one_embed --batch_size 64 --lr 1e-5
 
 # Run the script with logger:
 #python -u train_with_logger.py -l ~/${SLURM_JOB_NAME}_${SLURM_JOB_ID}  -t True -p True -d True -s True -f True
