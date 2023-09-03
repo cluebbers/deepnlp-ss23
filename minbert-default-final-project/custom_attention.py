@@ -1,5 +1,4 @@
 from bert import BertSelfAttentionBase, BertSelfAttention
-from sparsemax import Sparsemax
 import torch
 import math
 
