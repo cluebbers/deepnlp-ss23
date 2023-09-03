@@ -206,30 +206,12 @@ Those two adjustments of the datasets worked out and improved the performance on
 The following results were obtained:
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---
-| Sophia Tuned standard lr |     47,6 %         |      78,8%       | 36,7 % |
+| Sophia Tuned standard lr |     78,8 %         |      47,6%       | 36,7 % |
 | Sophia balanced data  |     81,8 %         |      47,8%       | 45,5%  |
 
-Use the same command as in the Tuning Sophia section and add the argument  ```--para_sep True --weights True``` for reproducing the results.
-
-That approach could improve the performance on the paraphrasing task by ... but we lost a few percentage points on the other task. So we conclude, on the on hand training on the QQP dataset first actually helps to gain more information from this huge dataset but on the other hand the three tasks seem to conflict each other. 
-
-#### Tackle imbalanced data
-The distribution of the different classes in the SST dataset is not equal (class one contains over two times more samples than class zero). As we see in the confusion matrix of our model, which was trained as in the previous section, many datapoints from class 0 are falsely predicted to be in class one (same problem with classes five and four). 
-
-<img src="confusion_matrix.png" alt="alt text" width="300" height="300">
-
-To balance the QQP and SST trainset we add weights to our Cross-Entropy loss function such that a training sample from a small class is assigned with an higher weight. This resulted in the following performance:
-| Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | -------------- | 
-| Sophia Baseline (Finn) |     45%          |      77,8%        | 32 % |
-| Sophia balanced data  |     47,8 %         |      81,8%       | 45,5%  |
-
-Use the same command as in the previous section and add the argument  ```--para_sep True --weights True``` for reproducing the results.
-
-With this approach we could improve the performance on the SST dataset compared to the last section by ... .
+Use the same command as in the Tuning Sophia section (with standard learning rate and no dropout) and add the argument  ```--para_sep True --weights True``` for reproducing the results.
 
 ### AdamW
-...
 
 #### Additional layers
 Another problem we earlier observed was that the task contradict each other, i.e. in separating QQP training the paraphrasing accuracy increased but the other to accuracies decreased. We try to solve these conflicts by adding a simple neural network with one hidden layer as classifier for each task instead of only a linear classifier. The idea is that each task gets more parameters to adjust which are not influenced by the other tasks. As activation function in the neuronal network we tested ReLu and tanh activation layers between the hidden layer and the output. The ReLu activation function performed better.  Furthermore, we tried to freeze the BERT parameters in the last trainings epohs and only train the classifier parameters. This improved the performance especially on the SST dataset.
@@ -239,8 +221,13 @@ Another problem we earlier observed was that the task contradict each other, i.e
 | Adam additional layer|     50%          |      88,4%        | 84,4 % |
 | Adam extra classifier training|     51,6%          |      88,5%        | 84,3 % |
 
-Use the same command as in the previous section and add the argument  ```--para_sep True --weights True --add_layers True``` for reproducing the results.
+Run the following command for the adam baseline:
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 4 --one_embed True --freeze_bert True --add_layers True --filepath final_freeze
+```
+For using the non linear classifier with ReLu activation add the argument ```--add_layers``` and for freezing the BERT parameters in the last epochs add the argument ```--freeze_bert``` 
 
+We also tested some dropout and weight decay values, but those couldn't improve the performance. Furthermore, the weighted loss function, which improved the Models performance with the Sophia optimizer didn't help here.
 ### SMART
 
 #### Implementation
@@ -510,7 +497,8 @@ Our model achieves the following performance:
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
 ## Future work
-- Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting.  This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task, see issue #60 for more details.
+- Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. 
+This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task. 
 - give other losses different weights. 
 - with or without combined losses. 
 - maybe based in dev_acc performance in previous epoch.
@@ -524,22 +512,6 @@ Lübbers, Christopher L.: Part 1 complete; Part 2: sBERT, Tensorboard (metrics +
 
 Niegsch, Lukas*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
-Schmidt, Finn Paul: sBert ultitzask training, Sophia dropout layers, Sophia seperated paraphrasing training, Sophia weighted loss, Optuna study on the dropout and hyperparameters, BERT baseline adam, BERT additional layers, error_analysis
+Schmidt, Finn Paul: sBert multi_task training, Sophia dropout layers, Sophia seperated paraphrasing training, Sophia weighted loss, Optuna study on the dropout and hyperparameters, BERT baseline adam, BERT additional layers, error_analysis
 
 
-## Submit commands
-
-To train the sophia base model with optimised parameters run :
-```
-python -u multitask_classifier.py --use_gpu --option finetune  --epochs 10 --comment "_sophia-chris_opt2" --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --lr_para 1e-5 --lr_sst 1e-5 --lr_sts 1e-5
-```
-
-To train the sophia model with dropout layers and optimized hyperparameters run:
-```
-python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 10 --hidden_dropout_prob_para 0.15 --hidden_dropout_prob_sst 0.052 --hidden_dropout_prob_sts 0.22 --lr_para 1.8e-05 --lr_sst 5.6e-06 --lr_sts 1.1e-05 --weight_decay_para 0.038 --weight_decay_sst 0.17 --weight_decay_sts 0.22 --comment individual_dropout
-```
-
-To train the sophia model with weighted loss and seperate paraphrasing training run:
-```
-python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 5 --weights True --para_sep True --hidden_dropout_prob_para 0 --hidden_dropout_prob_sst 0 --hidden_dropout_prob_sts 0 --lr_para 1e-05 --lr_sst 1e-05 --lr_sts 1e-05 --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --comment weighted_loss_without_dropout
-```
