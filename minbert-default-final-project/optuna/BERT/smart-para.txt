@@ -1,0 +1,4 @@
+Number of finished trials: 50
+Number of pruned trials: 6
+Number of complete trials: 44
+Best value: 0.67 (params: {'epsilon': 1.8275272934444165e-07, 'step_size': 0.0013683135113075665, 'noise_var': 2.318727239494994e-06, 'norm_p': 'L2'})
