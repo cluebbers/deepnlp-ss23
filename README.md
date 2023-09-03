@@ -572,11 +572,11 @@ This could be achieved be generating more (true) data from the datasets sst and 
 - Dropout and weight decay tuning for BERT (AdamW and Sophia)
 
 ## Member Contributions
-Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset 
+Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset
 
 Lübbers, Christopher L.: Part 1 complete; Part 2: sBERT, Tensorboard (metrics + profiler), sBERT-Baseline, SOPHIA, SMART, Optuna, sBERT-Optuna for Optimizer, Optuna for sBERT and BERT-SMART, Optuna for sBERT-regularization, sBERT with combinded losses, sBERT with gradient surgery, README-Experiments for those tasks, README-Methodology, final model, ai usage card
 
-Niegsch, Lukas*: Generalisations on Custom Attention, Splitted and reordererd batches, 
+Niegsch, Lukas*: Generalisations on Custom Attention, Splitted and reordererd batches, repository maintenance (merging, lfs, some code refactoring)
 
 Schmidt, Finn Paul:
 
