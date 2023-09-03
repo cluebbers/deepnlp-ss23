@@ -36,7 +36,7 @@ from optuna.visualization.matplotlib  import plot_rank
 from optuna.visualization.matplotlib  import plot_slice
 from optuna.visualization.matplotlib  import plot_timeline
 
-TQDM_DISABLE=True
+TQDM_DISABLE=False
 
 
 def train_multitask(args):       
@@ -72,13 +72,17 @@ def train_multitask(args):
     # Init model
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
               'hidden_dropout_prob2': args.hidden_dropout_prob2,
+              'hidden_dropout_prob_para': args.hidden_dropout_prob_para,
+              'hidden_dropout_prob_sst': args.hidden_dropout_prob_sst,
+              'hidden_dropout_prob_sts': args.hidden_dropout_prob_sts,
             'num_labels': num_labels,
             'hidden_size': 768,
             'data_dir': '.',
             'option': args.option,
             'local_files_only': args.local_files_only}
     
-    n_iter= len(sst_train_dataloader)
+    n_iter = 2
+    # n_iter= len(sst_train_dataloader)
     config = SimpleNamespace(**config)
 
     model = SmartMultitaskBERT(config)
@@ -126,7 +130,15 @@ def train_multitask(args):
                 b_labels = b_labels.to(device)
 
                 optimizer.zero_grad(set_to_none=True)
-                logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2)
+                if args.one_embed:
+                    b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                    b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                    #logits are unnormalized probabilities, the more negative a logit is the lower the similarity prediction of the model is
+                    logits = model(b_ids, b_mask, task_id = 2,add_layers= args.add_layers)
+        
+                else:
+                    #return cosine similarity between two embeddings
+                    similarity = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2,add_layers=args.add_layers)
                 
                 # SMART
                 if args.objective == "all" or args.objective == "sts":
@@ -142,7 +154,12 @@ def train_multitask(args):
                 else:
                     adv_loss = 0
                 
-                original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
+                if args.one_embed:
+                    # since similarity is between (0,5) the labels have to be normalized for the cross entropy such that
+                    # similarity is in (0,5)*0.2=(0,1)
+                    original_loss = F.binary_cross_entropy_with_logits(logits, b_labels*0.2)
+                else:
+                    original_loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
                 loss = original_loss + adv_loss
 
                 loss.backward()
@@ -166,7 +183,7 @@ def train_multitask(args):
                 b_labels = b_labels.to(device)
 
                 optimizer.zero_grad()
-                logits = model(b_ids, b_mask, task_id=0)
+                logits = model(b_ids, b_mask, task_id=0,add_layers=args.add_layers)
                 
                 # SMART
                 if args.objective == "all" or args.objective == "sst":
@@ -180,7 +197,11 @@ def train_multitask(args):
                 else:
                     adv_loss = 0            
                 
-                original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
+                w = torch.FloatTensor([2.1,1,1.3,1,1.8]).to(device)
+                if args.weights:
+                    original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean', weight=w)#,label_smoothing=0.1)
+                else:
+                    original_loss = F.cross_entropy(logits, b_labels.view(-1), reduction='mean')
                 loss = original_loss + adv_loss
 
                 loss.backward()
@@ -208,8 +229,14 @@ def train_multitask(args):
                 b_labels = b_labels.to(device)
 
                 optimizer.zero_grad()
-                logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1)
+                if args.one_embed:
+                    b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                    b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                    logits = model(b_ids, b_mask, task_id = 1,add_layers= args.add_layers)
                 
+                else:
+                    logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id = 1,add_layers= args.add_layers)
+                    
                 # SMART
                 if args.objective == "all" or args.objective == "para":
                     adv_loss = smart_perturbation.forward(
@@ -224,7 +251,11 @@ def train_multitask(args):
                 else:
                     adv_loss = 0
                     
-                original_loss = F.cross_entropy(logits, b_labels.view(-1).float(), reduction='mean')
+                if args.weights:
+                    w_p = torch.FloatTensor([1.66]).to(device)
+                    original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean', pos_weight=w_p)
+                else: 
+                    original_loss = F.binary_cross_entropy_with_logits(logits, b_labels.view(-1).float(), reduction='mean')
                 loss = original_loss + adv_loss
 
                 loss.backward()
@@ -267,15 +298,23 @@ def train_multitask(args):
             
         if pruned_trial:
             study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+            print_best_callback(study)
         elif args.objective == "all":   
             epoch_acc = (paraphrase_accuracy + sts_corr + sentiment_accuracy) / 3   
-            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)       
+            study.tell(trial, epoch_acc, state=TrialState.COMPLETE)      
+            print_best_callback(study) 
         elif args.objective == "para":       
             study.tell(trial, paraphrase_accuracy, state=TrialState.COMPLETE)  
+            print_best_callback(study)
         elif args.objective == "sst":       
             study.tell(trial, sentiment_accuracy, state=TrialState.COMPLETE)  
+            print_best_callback(study)
         elif args.objective == "sts":       
-            study.tell(trial, sts_corr, state=TrialState.COMPLETE)    
+            study.tell(trial, sts_corr, state=TrialState.COMPLETE)  
+            print_best_callback(study)  
+
+def print_best_callback(study):
+    print(f"Best value: {study.best_value}, Best params: {study.best_trial.params}")
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -315,6 +354,12 @@ def get_args():
     parser.add_argument("--smart", action='store_true', default=True)
     parser.add_argument("--objective", choices=("all","para", "sst", "sts"), default="all")
     parser.add_argument("--hidden_dropout_prob2", type=float, default=None)
+    parser.add_argument("--add_layers", help="add additional layers in model.predict_para/sts/sst", action='store_true', default=False)
+    parser.add_argument("--one_embed", help="produce one bert embedding for a sentence pair instead of two seperate ones", type=bool, default=False)
+    parser.add_argument("--hidden_dropout_prob_para", type=float, default=0)
+    parser.add_argument("--hidden_dropout_prob_sst", type=float, default=0)
+    parser.add_argument("--hidden_dropout_prob_sts", type=float, default=0)
+    parser.add_argument("--weights", help="balance loss function with weights in para and sst", type=bool, default=False)
     
     args = parser.parse_args()
     return args

@@ -278,10 +278,10 @@ class SmartMultitaskBERT(nn.Module):
         input_ids_2=None,
         attention_mask_2=None,
         task_id=0,
-        task_na=0,
-        add_layers=False,
+        task_na=0,        
         embednoise_1=None,
-        embednoise_2=None):
+        embednoise_2=None,
+        add_layers=False):
         
         if task_na==2:
             embed_1 = embednoise_1
@@ -290,27 +290,19 @@ class SmartMultitaskBERT(nn.Module):
             # input embeddings
             embed_1 = self.bert(input_ids_1, attention_mask_1)['pooler_output']            
             embed_2 = self.bert(input_ids_2, attention_mask_2)['pooler_output'] if input_ids_2 is not None else None
-            
-        embed_1 = self.dropout(embed_1)
-        if self.dropout2 is not None:
-            embed_2 = self.dropout2(embed_2) if input_ids_2 is not None else None
-        else:
-            embed_2 = self.dropout(embed_2) if input_ids_2 is not None else None
         
         if task_na == 1:
             return embed_1, embed_2
         
         if task_id == 0: # Sentiment classification
-            return self.predict_sentiment(embed_1,add_layers=add_layers)
+            return self.predict_sentiment(embed_1, add_layers=add_layers)
         elif task_id == 1: # Paraphrase detection
-            return self.predict_paraphrase(embed_1, embed_2,add_layers=add_layers)
+            return self.predict_paraphrase(embed_1, embed_2, add_layers=add_layers)
         elif task_id == 2: # Semantic Textual Similarity
-            return self.predict_similarity(embed_1, embed_2,add_layers=add_layers)
+            return self.predict_similarity(embed_1, embed_2, add_layers=add_layers)
         else:
             raise ValueError("Invalid task_id")
        
-            
-
     def predict_sentiment(self, embed_1,add_layers=False):
         '''Given a batch of sentences, outputs logits for classifying sentiment.
         There are 5 sentiment classes:
@@ -319,12 +311,10 @@ class SmartMultitaskBERT(nn.Module):
         '''          
         
         if add_layers: 
-            
             embed_1 = self.dropout_sst(embed_1)
             embed_1_hidden = self.sentiment_hidden_layer(embed_1)
             embed_1_hidden_forward = self.relu(embed_1_hidden)
             sentiment_logit = self.sentiment_output(embed_1_hidden_forward)
-            
             
         else:
             embed_1 = self.dropout_sst(embed_1)
@@ -369,7 +359,7 @@ class SmartMultitaskBERT(nn.Module):
             
        
 
-    def predict_similarity(self, embed_1, embed_2,add_layers=False):
+    def predict_similarity(self, embed_1, embed_2, add_layers=False):
         '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
         Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
         during evaluation, and handled as a logit by the appropriate loss function.
