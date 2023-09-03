@@ -393,11 +393,7 @@ def train_multitask(args):
         for i, class_f1 in enumerate(dev_sst_f1):
             writer.add_scalar(f"sst/dev-f1/class_{i}", class_f1, epoch)        
         
-        writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)
-        # close tensorboard
-        writer.flush()
-        writer.close()
-        
+        writer.add_scalar("sts/dev-cor", dev_sts_cor, epoch)        
         
         # store best results    
         if dev_para_acc > best_para_dev_acc:
@@ -528,7 +524,7 @@ def get_args():
     
     parser.add_argument("--k_for_sophia", type=int, help="how often to update the hessian? default is 10", default=10)    
     # tensorboard    
-    parser.add_argument("--logdir", type=str, default='')
+    parser.add_argument("--logdir", type=str, default='runs')
     parser.add_argument("--comment", type=str, default="")
     parser.add_argument("--profiler", action="store_true")
     parser.add_argument("--custom_attention", type=str, choices = CUSTOM_ATTENTION_CHOICES,
