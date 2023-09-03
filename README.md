@@ -7,49 +7,6 @@ The project description can be found in SS23_DNLP_ProjectDescription.pdf
 The goal for Part 1 is to implement a base BERT version including the AdamW optimizer and train it for sentiment analysis on Stanford Sentiment Treebank (SST). 
 The goal for Part 2 is to implement multitask training for sentiment analysis on Stanford Sentiment Treebank (SST), paraphrase detection on Quora Question Pairs Dataset (QQP) and semantic textual similarity on SemEval STS Benchmark (STS).
 
-
-
-##Submit commands
-
-Für sophia base mit optimierten parametern zu trainieren:
-```
-python -u multitask_classifier.py --use_gpu --option finetune  --epochs 10 --comment "_sophia-chris_opt2" --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --lr_para 1e-5 --lr_sst 1e-5 --lr_sts 1e-5
-```
-
-Für sophia mit optimierten parametern und dropout layern:
-```
-python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 10 --hidden_dropout_prob_para 0.15 --hidden_dropout_prob_sst 0.052 --hidden_dropout_prob_sts 0.22 --lr_para 1.8e-05 --lr_sst 5.6e-06 --lr_sts 1.1e-05 --weight_decay_para 0.038 --weight_decay_sst 0.17 --weight_decay_sts 0.22 --comment individual_dropout
-```
-
-Für sophia mit gewichtetem loss und para datenset als erstes ein paar epochen zu trainieren (ohne dropout):
-```
-python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 5 --weights True --para_sep True --hidden_dropout_prob_para 0 --hidden_dropout_prob_sst 0 --hidden_dropout_prob_sts 0 --lr_para 1e-05 --lr_sst 1e-05 --lr_sts 1e-05 --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --comment weighted_loss_without_dropout
-```
-
-
-
-Für die baseline mit AdamW und einem embedding:
-```
-submit_multi_adamw_one_embed.sh
-```
-Um nicht linearen classifier zu verwenden nutze:
-```
-submit_multi_adamw_add_layers.sh
-```
-
-Um zuerst vier epochen alles zu trainieren (bert+nicht linearer classifier) und danach 10 epochen nur den nicht linearen classifier lasse folgendes laufen:
-```
-python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 4 --one_embed True --freeze_bert True --add_layers True 
-```
-das verbessert das ergebnis nochmal etwas ( dritte Zeile) (man muss scheinbar nur eine epoche den nicht linearen classifier trainieren um schon das beste ergebnis zu bekommen, da er auch schon davor in diesem Fall mittrainiert wurde).
-
-Ergebnisse:
-| Model name         | SST accuracy | QQP accuracy | STS correlation |
-| ------------------ |---------------- | -------------- | ---
-| Adam new base |     50,3 %         |      86,4 %       | 84,7 % |
-| Adam additional layer|     50%          |      88,4%        | 84,4 % |
-| Adam extra classifier training|     51,6%          |      88,5%        | 84,3 % |
-
 ## Methodology
 ### Part 1
 We followed the instructions in the project description.
@@ -174,7 +131,7 @@ python optuna_optimizer.py --use_gpu
 ```
 Optuna: `./optuna/optimizer-*`
 
-<img src="minbert-default-final-project/optuna/optimizer-slice.png" alt="alt text" width="900" height="300">
+<img src="minbert-default-final-project/optuna/sBERT/optimizer-slice.png" alt="alt text" width="900" height="300">
 
 The slice plot shows that learning rate and weight decay should be larger for Sophia.
 
@@ -316,11 +273,11 @@ python -u optuna_smart.py --use_gpu --batch_size 50 --objective sts
 ```
 Optuna: `./optuna/smart-*`
 
-| Model name         | epsilon  | step size  | noise_var  | norm_p
-| ------------------ |---------------- | -------------- | ---------------- |---------------- |
-| SST |     3.93e-6       |      0.0001    | 4.21e-6 | inf |
-| QQP |     1.88e-7      |      0.0012     | 1.31e-5 | L2 |
-| STS |     4.38e-7      |      0.0024    | 1.67e-5 | L2 |
+| Model name         | accuracy | epsilon  | step size  | noise_var  | norm_p
+| ------------------ | -------------- |---------------- | -------------- | ---------------- |---------------- |
+| sBERT-SST |     51.31 | 3.93e-6       |      0.0001    | 4.21e-6 | inf |
+| sBERT-QQP |    79.34 |  1.88e-7      |      0.0012     | 1.31e-5 | L2 |
+| sBERT-STS |     49.64 | 4.38e-7      |      0.0024    | 1.67e-5 | L2 |
 
 Training with these parameters:
 ```
@@ -388,7 +345,83 @@ Implementation from [Paper](https://arxiv.org/pdf/2001.06782.pdf) and [code](htt
 ```
 python -u multitask_combined_loss.py --use_gpu --batch_size 10 --pcgrad --epochs 15 --comment "pcgrad" --lr 1e-5 --optim "adamw" --batch_size 40
 ```
-IT STOPS WHILE OPTIMIZING BECAUSE SOME LOGITS ARE NA
+It fails because some logits are NA.
+
+## Part 2 BERT
+
+Since we were not particulary successfull with our sBERT, we also did some regular Base BERT training.
+Similarity is now calculated by combining the input and then getting BERT embeddings.
+Then we use a linear classifier to output logits.
+The logits are multiplied by 0.2 to get a similarity score between 0 and 5.
+### dataloader
+We noticed that the dataloader for the sts dataset converts the lables to integers. We fixed it by setting the option isRegression to True in `datasets.py`
+```
+sts_train_data = SentencePairDataset(sts_train_data, args, isRegression = True)
+sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression = True)
+```
+This improves training by a few percent.
+
+### Baseline
+
+Für die baseline mit AdamW und einem embedding:
+```
+submit_multi_adamw_one_embed.sh
+```
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Adam new base |     50,3 %         |      86,4 %       | 84,7 % |
+
+### non-linear classifier
+
+Um nicht linearen classifier zu verwenden nutze:
+```
+submit_multi_adamw_add_layers.sh
+```
+
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Adam additional layer|     50%          |      88,4%        | 84,4 % |
+
+
+### freeze
+Um zuerst vier epochen alles zu trainieren (bert+nicht linearer classifier) und danach 10 epochen nur den nicht linearen classifier lasse folgendes laufen:
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 4 --one_embed True --freeze_bert True --add_layers True 
+```
+das verbessert das ergebnis nochmal etwas ( dritte Zeile) (man muss scheinbar nur eine epoche den nicht linearen classifier trainieren um schon das beste ergebnis zu bekommen, da er auch schon davor in diesem Fall mittrainiert wurde).
+
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---
+| Adam extra classifier training|     51,6%          |      88,5%        | 84,3 % |
+
+### Tuning SMART
+We did another Optuna SMART run for base BERT.
+Currently only works on branch 47.
+
+```
+python -u optuna_smart.py --use_gpu --batch_size 50 --objective sst --one_embed True --add_layers --n_trials 50 --epochs 3
+python -u optuna_smart.py --use_gpu --batch_size 50 --objective sts --one_embed True --add_layers --n_trials 50 --epochs 3
+python -u optuna_smart.py --use_gpu --batch_size 50 --objective para --one_embed True --add_layers --n_trials 50 --epochs 3
+```
+
+| Model name         | accuracy | epsilon  | step size  | noise_var  | norm_p
+| ------------------ | -------------- |---------------- | -------------- | ---------------- |---------------- |
+| sBERT-SST |     51.31 | 3.93e-6       |      0.0001    | 4.21e-6 | inf |
+| BERT-SST |     49.59 | 2.95e-7       |      0.0067    | 1.41e-6 | L1 |
+| sBERT-QQP |    79.34 |  1.88e-7      |      0.0012     | 1.31e-5 | L2 |
+| BERT-QQP |     67.00 | 1.83e-7      |      0.0014     | 2.32e-6 | L2 |
+| sBERT-STS |     49.64 | 4.38e-7      |      0.0024    | 1.67e-5 | L2 |
+| BERT-STS |     27.29 | 6.65e-6     |      0.0002    | 7.84e-6 | L1 |
+### Final model
+We combined some of our results in the final model. 
+
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 10 --one_embed True  --add_layers True --comment adam_add_layers_one_embed --batch_size 64 --lr 1e-5
+```
+| Model name         | SST accuracy | QQP accuracy | STS correlation |
+| ------------------ |---------------- | -------------- | ---------------- |
+| BERT-Final |     51.2 %         |      88.8 %       | 82.2 % |
+
 ## Requirements
 
 You can use `setup.sh` or `setup_gwdg.sh` to create an environment and install the needed packages. Added to standard project ones:
@@ -444,6 +477,7 @@ Our model achieves the following performance:
 | sBERT-CenterMatrixSelfAttentionWithSparsemax       | 39.1% | 75.6% | 40.4% |
 | sBERT-CenterMatrixLinearSelfAttention              | 42.4% | 76.2% | 42.4% |
 | sBERT-CenterMatrixLinearSelfAttentionWithSparsemax | 39.7% | 76.4% | 39.2% |
+| BERT-Final |     51.2 %         |      88.8 %       | 82.2 % |
 
 [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0)
 
@@ -465,8 +499,26 @@ This could be achieved be generating more (true) data from the datasets sst and 
 ## Member Contributions
 Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset 
 
-Lübbers, Christopher L.: Part 1 complete; Part 2: sBERT, Tensorboard (metrics + profiler), sBERT-Baseline, SOPHIA, SMART, Optuna, sBERT-Optuna for Optimizer, Optuna for sBERT-SMART, Optuna for sBERT-regularization, sBERT with combinded losses, sBERT with gradient surgery, README for those tasks
+Lübbers, Christopher L.: Part 1 complete; Part 2: sBERT, Tensorboard (metrics + profiler), sBERT-Baseline, SOPHIA, SMART, Optuna, sBERT-Optuna for Optimizer, Optuna for sBERT and BERT-SMART, Optuna for sBERT-regularization, sBERT with combinded losses, sBERT with gradient surgery, README for those tasks
 
 Niegsch, Luaks*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
 Schmidt, Finn Paul:
+
+
+##Submit commands
+
+Für sophia base mit optimierten parametern zu trainieren:
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --epochs 10 --comment "_sophia-chris_opt2" --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --lr_para 1e-5 --lr_sst 1e-5 --lr_sts 1e-5
+```
+
+Für sophia mit optimierten parametern und dropout layern:
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 10 --hidden_dropout_prob_para 0.15 --hidden_dropout_prob_sst 0.052 --hidden_dropout_prob_sts 0.22 --lr_para 1.8e-05 --lr_sst 5.6e-06 --lr_sts 1.1e-05 --weight_decay_para 0.038 --weight_decay_sst 0.17 --weight_decay_sts 0.22 --comment individual_dropout
+```
+
+Für sophia mit gewichtetem loss und para datenset als erstes ein paar epochen zu trainieren (ohne dropout):
+```
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "sophiag" --epochs 5 --weights True --para_sep True --hidden_dropout_prob_para 0 --hidden_dropout_prob_sst 0 --hidden_dropout_prob_sts 0 --lr_para 1e-05 --lr_sst 1e-05 --lr_sts 1e-05 --batch_size 64 --optimizer "sophiag" --weight_decay_para 0.1267 --weight_decay_sst 0.2302 --weight_decay_sts 0.1384 --rho_para 0.0417 --rho_sst 0.0449 --rho_sts 0.0315 --comment weighted_loss_without_dropout
+```
