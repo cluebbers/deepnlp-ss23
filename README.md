@@ -510,8 +510,7 @@ Our model achieves the following performance:
 >📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
 
 ## Future work
-- Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting. 
-This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task. 
+- Since the huge size of the para dataset (comparing) to both of the sizes of the sst and sts datasets is leading to overfitting, then an enlargemnt of the sizes of the datasets sst and sts should reduce the possibilty of overfitting.  This could be achieved be generating more (true) data from the datasets sst and sts, which is possible by adding another additional Task, see issue #60 for more details.
 - give other losses different weights. 
 - with or without combined losses. 
 - maybe based in dev_acc performance in previous epoch.
