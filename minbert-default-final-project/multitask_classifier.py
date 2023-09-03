@@ -140,7 +140,7 @@ def train_step_sts_generator(model, dataloaders, optimizer, epoch, args, perturb
             # similarity is in (0,5)*0.2=(0,1)
             original_loss = F.binary_cross_entropy_with_logits(logits, b_labels*0.2)
         else:
-            original_loss = F.mse_loss(similarity, b_labels.view(-1).float(), reduction='mean')
+            original_loss = F.mse_loss(logits, b_labels.view(-1).float(), reduction='mean')
 
         loss = original_loss + adv_loss
         if args.option == "pretrain":
