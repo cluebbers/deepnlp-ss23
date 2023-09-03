@@ -624,3 +624,177 @@ def smart_eval(sentiment_dataloader,
         return (para_loss,paraphrase_accuracy, para_y_pred, para_sent_ids, paraphrase_precision, paraphrase_recall, paraphrase_f1, 
                 sst_loss,sentiment_accuracy,sst_y_pred, sst_sent_ids, sentiment_precision, sentiment_recall, sentiment_f1,
                 sts_loss,sts_corr, sts_y_pred, sts_sent_ids)
+
+def test_model_smart(args, model, device):
+        sst_test_data, num_labels,para_test_data, sts_test_data = \
+            load_multitask_data(args.sst_test,args.para_test, args.sts_test, split='test')
+
+        sst_dev_data, num_labels,para_dev_data, sts_dev_data = \
+            load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev,split='dev')
+
+        sst_test_data = SentenceClassificationTestDataset(sst_test_data, args)
+        sst_dev_data = SentenceClassificationDataset(sst_dev_data, args)
+
+        sst_test_dataloader = DataLoader(sst_test_data, shuffle=True, batch_size=args.batch_size,
+                                         collate_fn=sst_test_data.collate_fn)
+        sst_dev_dataloader = DataLoader(sst_dev_data, shuffle=False, batch_size=args.batch_size,
+                                        collate_fn=sst_dev_data.collate_fn)
+
+        para_test_data = SentencePairTestDataset(para_test_data, args)
+        para_dev_data = SentencePairDataset(para_dev_data, args) 
+
+        para_test_dataloader = DataLoader(para_test_data, shuffle=True, batch_size=args.batch_size,
+                                          collate_fn=para_test_data.collate_fn)
+        para_dev_dataloader = DataLoader(para_dev_data, shuffle=False, batch_size=args.batch_size,
+                                         collate_fn=para_dev_data.collate_fn)
+
+        sts_test_data = SentencePairTestDataset(sts_test_data, args)
+        sts_dev_data = SentencePairDataset(sts_dev_data, args, isRegression=True)
+
+        sts_test_dataloader = DataLoader(sts_test_data, shuffle=True, batch_size=args.batch_size,
+                                         collate_fn=sts_test_data.collate_fn)
+        sts_dev_dataloader = DataLoader(sts_dev_data, shuffle=False, batch_size=args.batch_size,
+                                        collate_fn=sts_dev_data.collate_fn)
+
+        _,dev_paraphrase_accuracy, dev_para_y_pred, dev_para_sent_ids,_,_,_, \
+            _,dev_sentiment_accuracy,dev_sst_y_pred, dev_sst_sent_ids,_,_,_,_,dev_sts_corr, \
+            dev_sts_y_pred, dev_sts_sent_ids,embed,labels = smart_eval(sst_dev_dataloader,
+                                                                    para_dev_dataloader,
+                                                                    sts_dev_dataloader, model, device, 
+                                                                    n_iter=9999999,one_embed=args.one_embed,add_layers=args.add_layers)
+
+        test_para_y_pred, test_para_sent_ids, test_sst_y_pred, \
+            test_sst_sent_ids, test_sts_y_pred, test_sts_sent_ids = \
+                model_eval_test_smart(sst_test_dataloader,
+                                          para_test_dataloader,
+                                          sts_test_dataloader, model, device,
+                                          n_iter=9999999,one_embed=args.one_embed,add_layers=args.add_layers)
+
+        with open(args.sst_dev_out, "w+") as f:
+            print(f"dev sentiment acc :: {dev_sentiment_accuracy :.3f}")
+            f.write(f"id \t Predicted_Sentiment \n")
+            for p, s in zip(dev_sst_sent_ids, dev_sst_y_pred):
+                f.write(f"{p} , {s} \n")
+
+        with open(args.sst_test_out, "w+") as f:
+            f.write(f"id \t Predicted_Sentiment \n")
+            for p, s in zip(test_sst_sent_ids, test_sst_y_pred):
+                f.write(f"{p} , {s} \n")
+
+        with open(args.para_dev_out, "w+") as f:
+            print(f"dev paraphrase acc :: {dev_paraphrase_accuracy :.3f}")
+            f.write(f"id \t Predicted_Is_Paraphrase \n")
+            for p, s in zip(dev_para_sent_ids, dev_para_y_pred):
+                f.write(f"{p} , {s} \n")
+
+        with open(args.para_test_out, "w+") as f:
+            f.write(f"id \t Predicted_Is_Paraphrase \n")
+            for p, s in zip(test_para_sent_ids, test_para_y_pred):
+                f.write(f"{p} , {s} \n")
+
+        with open(args.sts_dev_out, "w+") as f:
+            print(f"dev sts corr :: {dev_sts_corr :.3f}")
+            f.write(f"id \t Predicted_Similiary \n")
+            for p, s in zip(dev_sts_sent_ids, dev_sts_y_pred):
+                f.write(f"{p} , {s} \n")
+
+        with open(args.sts_test_out, "w+") as f:
+            f.write(f"id \t Predicted_Similiary \n")
+            for p, s in zip(test_sts_sent_ids, test_sts_y_pred):
+                f.write(f"{p} , {s} \n")
+                
+        return dev_paraphrase_accuracy,dev_sentiment_accuracy,dev_sts_corr, embed,labels
+    
+# Perform model evaluation in terms by averaging accuracies across tasks.
+def model_eval_test_smart(sentiment_dataloader,
+                         paraphrase_dataloader,
+                         sts_dataloader,
+                         model, device, n_iter,one_embed=False,add_layers=False):
+    model.eval()  # switch to eval model, will turn off randomness like dropout
+
+    with torch.no_grad():
+
+        para_y_pred = []
+        para_sent_ids = []
+        # Evaluate paraphrase detection.
+        for step, batch in enumerate(tqdm(paraphrase_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                          batch['token_ids_2'], batch['attention_mask_2'],
+                          batch['sent_ids'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+            
+            if one_embed:
+                b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                logits = model(b_ids, b_mask, task_id = 1,add_layers=add_layers)
+            else:
+                logits = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=1,add_layers=add_layers)
+
+            y_hat = logits.sigmoid().round().flatten().cpu().numpy()
+
+            para_y_pred.extend(y_hat)
+            para_sent_ids.extend(b_sent_ids)
+
+
+        sts_y_pred = []
+        sts_sent_ids = []
+
+
+        # Evaluate semantic textual similarity.
+        for step, batch in enumerate(tqdm(sts_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+            (b_ids1, b_mask1,
+             b_ids2, b_mask2,
+             b_sent_ids) = (batch['token_ids_1'], batch['attention_mask_1'],
+                          batch['token_ids_2'], batch['attention_mask_2'],
+                          batch['sent_ids'])
+
+            b_ids1 = b_ids1.to(device)
+            b_mask1 = b_mask1.to(device)
+            b_ids2 = b_ids2.to(device)
+            b_mask2 = b_mask2.to(device)
+
+            if one_embed:
+                b_ids = torch.cat([b_ids1,b_ids2],dim=1)
+                b_mask = torch.cat([b_mask1,b_mask2],dim=1)
+                #logits are unnormalized probabilities, the more negative a logit is the lower the similarity prediction of the model is
+                logits = model(b_ids, b_mask, task_id = 2,add_layers=add_layers)
+    
+            else:
+                similarity = model(b_ids1, b_mask1, b_ids2, b_mask2, task_id=2, add_layers=add_layers)
+                
+            if one_embed:
+                y_hat = logits.sigmoid().flatten().cpu().numpy()*5 #unnormalize predictions after passing them through sigmoid function
+            else:
+                y_hat = similarity.flatten().cpu().numpy()
+
+            sts_y_pred.extend(y_hat)
+            sts_sent_ids.extend(b_sent_ids)
+
+
+        sst_y_pred = []
+        sst_sent_ids = []
+
+        # Evaluate sentiment classification.
+        for step, batch in enumerate(tqdm(sentiment_dataloader, desc=f'eval', disable=TQDM_DISABLE)):
+            b_ids, b_mask, b_sent_ids = batch['token_ids'], batch['attention_mask'],  batch['sent_ids']
+
+            b_ids = b_ids.to(device)
+            b_mask = b_mask.to(device)
+            
+            logits = logits = model(b_ids, b_mask, task_id=0, add_layers = add_layers)
+            y_hat = logits.argmax(dim=-1).flatten().cpu().numpy()
+
+            sst_y_pred.extend(y_hat)
+            sst_sent_ids.extend(b_sent_ids)
+
+            
+
+        return (para_y_pred, para_sent_ids,
+                sst_y_pred, sst_sent_ids,
+                sts_y_pred, sts_sent_ids)

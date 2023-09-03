@@ -19,7 +19,7 @@ from datasets import SentenceClassificationDataset, SentencePairDataset, \
 from models import *
 from optimizer import SophiaG
 
-from evaluation import test_model_multitask
+from evaluation import *
 
 # CLL import multitask evaluation
 from evaluation import smart_eval
@@ -667,7 +667,7 @@ def test_model(args):
         model = model.to(device)
         print(f"Loaded model to test from {args.filepath}")
 
-        para_acc,sst_acc,sts_cor,embed,labels = test_model_multitask(args, model, device)
+        para_acc,sst_acc,sts_cor,embed,labels = test_model_smart(args, model, device)
     return model,para_acc,sst_acc,sts_cor,embed,labels
 
 def get_args():
@@ -789,4 +789,4 @@ if __name__ == "__main__":
             train_multitask(args)
             
     # if not args.profiler:
-    #     test_model(args)
+    test_model(args)
