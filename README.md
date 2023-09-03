@@ -407,7 +407,7 @@ Tensorboard: Sep03_11-23-24_bert_smart
 | BERT-SMART |     51.6 %         |      88.8 %       | 43.8 % |
 
 The bad sts correlation is because SMART uses MSE loss for its calculation of adverserial loss. 
-We did not change it yet.
+We did not change it **yet**.
 
 ### Tuning SMART
 We did another Optuna SMART run for base BERT.
@@ -429,7 +429,7 @@ python -u optuna_smart.py --use_gpu --batch_size 50 --objective para --one_embed
 | BERT-STS |     27.29 | 6.65e-6     |      0.0002    | 7.84e-6 | L1 |
 
 The bad sts correlation is because SMART uses MSE loss for its calculation of adverserial loss. 
-We did not change it yet.
+We did not change it **yet**.
 
 ### Final model
 We combined some of our results in the final model. 
@@ -516,22 +516,20 @@ This could be achieved be generating more (true) data from the datasets sst and 
 - give other losses different weights. 
 - with or without combined losses. 
 - maybe based in dev_acc performance in previous epoch.
-
-## Contributing
-
->📋  Pick a licence and describe how to contribute to your code repository. 
+- implement SMART for BERT-STS
+- Dropout and weight decay tuning for BERT (AdamW and Sophia)
 
 ## Member Contributions
 Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset 
 
 Lübbers, Christopher L.: Part 1 complete; Part 2: sBERT, Tensorboard (metrics + profiler), sBERT-Baseline, SOPHIA, SMART, Optuna, sBERT-Optuna for Optimizer, Optuna for sBERT and BERT-SMART, Optuna for sBERT-regularization, sBERT with combinded losses, sBERT with gradient surgery, README for those tasks
 
-Niegsch, Luaks*: Generalisations on Custom Attention, Splitted and reordererd batches, 
+Niegsch, Lukas*: Generalisations on Custom Attention, Splitted and reordererd batches, 
 
 Schmidt, Finn Paul:
 
 
-##Submit commands
+## Submit commands
 
 Für sophia base mit optimierten parametern zu trainieren:
 ```
