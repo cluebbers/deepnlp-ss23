@@ -472,13 +472,13 @@ We did not change it **yet**.
 We combined some of our results in the final model. 
 
 ```
-python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 10 --one_embed True  --add_layers True --comment adam_add_layers_one_embed --batch_size 64 --lr 1e-5
+python -u multitask_classifier.py --use_gpu --option finetune  --optimizer "adamw" --epochs 30 --one_embed True  --add_layers True --comment adam_add_layers_one_embed --batch_size 64 --lr 1e-5
 ```
-Tensorboard: Sep03_11-24-17_bert_final
+Tensorboard: Sep03_21-15-31_bert_final_30
 
 | Model name         | SST accuracy | QQP accuracy | STS correlation |
 | ------------------ |---------------- | -------------- | ---------------- |
-| BERT-Final |     51.2 %         |      88.8 %       | 82.2 % |
+| BERT-Final |     51.3 %         |      88.9 %       | 85.1% |
 
 ## Requirements
 
@@ -539,7 +539,7 @@ Our model achieves the following performance:
 | BERT-SMART |     51.6 %         |      88.8 %       | 43.8 % |
 | BERT additional layer|     50%          |      88,4%        | 84,4 % |
 | BERT extra classifier training|     51,6%          |      88,5%        | 84,3 % |
-| BERT-Final |     51.2 %         |      88.8 %       | 82.2 % |
+| BERT-Final |     51.3 %         |      88.9 %       | 85.1% |
 
 [Leaderboard](https://docs.google.com/spreadsheets/d/1Bq21J3AnxyHJ9Wb9Ik9OXvtX6O4L2UdVX9Y9sBg7v8M/edit#gid=0)
 
