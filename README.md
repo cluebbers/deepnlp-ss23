@@ -554,6 +554,9 @@ Our model achieves the following performance:
 - maybe based in dev_acc performance in previous epoch.
 - implement SMART for BERT-STS
 - Dropout and weight decay tuning for BERT (AdamW and Sophia)
+- CAPTUM implementation for deeper error analysis
+- low confidence prediction analysis
+- length vs metric score
 
 ## Member Contributions
 Dawor, Moataz: Generalisations on Custom Attention, Splitted and reordererd batches, analysis_dataset
